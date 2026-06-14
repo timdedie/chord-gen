@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useUser } from '@clerk/nextjs';
 
 export interface UsePremiumGenerationReturn {
     isSignedIn: boolean;
     available: boolean;
+    loading: boolean;
     enabled: boolean;
     used: number;
     limit: number;
@@ -24,28 +25,58 @@ interface Status {
 
 const EMPTY: Status = { used: 0, limit: 0, unlimited: false };
 
-const STORAGE_KEY = 'chordgen.premiumEnabled';
+// Session-scoped, in-memory toggle store.
+//
+// Intentionally NOT persisted to localStorage/sessionStorage: the premium
+// toggle should default to OFF on every fresh page load. Activating it keeps it
+// on across client-side navigation within the app (this module stays alive), but
+// a full reload or leaving and coming back later reinitializes the module, so it
+// resets to off. A small subscriber set keeps any mounted hook instances in sync.
+let enabledState = false;
+const listeners = new Set<() => void>();
+
+function setEnabledState(next: boolean) {
+    if (enabledState === next) return;
+    enabledState = next;
+    listeners.forEach((l) => l());
+}
+
+function subscribeEnabled(cb: () => void) {
+    listeners.add(cb);
+    return () => {
+        listeners.delete(cb);
+    };
+}
+
+const getEnabledSnapshot = () => enabledState;
+const getEnabledServerSnapshot = () => false;
 
 export function usePremiumGeneration(): UsePremiumGenerationReturn {
     const { isSignedIn, isLoaded } = useUser();
     const [status, setStatus] = useState<Status>(EMPTY);
-    const [rawEnabled, setEnabled] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return window.localStorage.getItem(STORAGE_KEY) === '1';
-    });
+    const [statusLoaded, setStatusLoaded] = useState(false);
+    const rawEnabled = useSyncExternalStore(
+        subscribeEnabled,
+        getEnabledSnapshot,
+        getEnabledServerSnapshot
+    );
 
     const refresh = useCallback(() => {
         if (!isSignedIn) return;
         fetch('/api/premium-status', { cache: 'no-store' })
             .then((res) => res.json())
-            .then((data) =>
+            .then((data) => {
                 setStatus({
                     used: Number(data.used ?? 0),
                     limit: Number(data.limit ?? 0),
                     unlimited: Boolean(data.unlimited),
-                })
-            )
-            .catch(() => setStatus(EMPTY));
+                });
+                setStatusLoaded(true);
+            })
+            .catch(() => {
+                setStatus(EMPTY);
+                setStatusLoaded(true);
+            });
     }, [isSignedIn]);
 
     useEffect(() => {
@@ -75,35 +106,40 @@ export function usePremiumGeneration(): UsePremiumGenerationReturn {
     // Treat status as empty once the user is signed out, without discarding
     // the fetched state (it's reused if they sign back in).
     const effectiveStatus = isSignedIn ? status : EMPTY;
-    const available = effectiveStatus.unlimited || effectiveStatus.used < effectiveStatus.limit;
+    // Availability is always accurate — never optimistic. We only report premium
+    // as available once we've actually confirmed remaining quota with the server,
+    // so a user with nothing left can never click the toggle (not even briefly).
+    const available =
+        effectiveStatus.unlimited || effectiveStatus.used < effectiveStatus.limit;
 
-    // A persisted "on" state is only honored once we know it's actually
-    // usable (signed in, with premium remaining); before the status loads we
-    // optimistically keep showing it as on.
-    const enabled = rawEnabled && (!isLoaded || (isSignedIn && available));
+    // While Clerk resolves or the status request is in flight for a signed-in
+    // user, we don't yet know the quota. `loading` lets the toggle show a neutral
+    // "checking" state instead of looking like a dead/disabled button.
+    const loading = !isLoaded || (Boolean(isSignedIn) && !statusLoaded);
 
-    // Persist the toggle so it survives navigation/reload until the user
-    // explicitly turns it off, but never persist it for a signed-out user
-    // or once it's no longer usable.
+    const enabled = Boolean(isSignedIn) && rawEnabled;
+
+    // Reconcile the toggle once we know it can no longer be used: the user is
+    // signed out, or we've confirmed there's no premium left for today.
     useEffect(() => {
-        if (typeof window === 'undefined') return;
-        if (enabled) {
-            window.localStorage.setItem(STORAGE_KEY, '1');
-        } else {
-            window.localStorage.removeItem(STORAGE_KEY);
+        if (!isLoaded) return;
+        if (!isSignedIn) {
+            setEnabledState(false);
+            return;
         }
-    }, [enabled]);
+        if (statusLoaded && !available) setEnabledState(false);
+    }, [isLoaded, isSignedIn, statusLoaded, available]);
 
     const toggle = useCallback(() => {
         if (!isSignedIn || !available) return;
-        setEnabled((prev) => !prev);
+        setEnabledState(!enabledState);
     }, [isSignedIn, available]);
 
     // Called after a premium generation lands. Bump the count optimistically
     // so the UI reflects the use immediately, then reconcile with the server
     // (a fresh status fetch can lag the generation's DB write). The toggle
     // stays on for the next generation as long as premium is still available;
-    // the effect above will turn it off once the quota is exhausted.
+    // the effect above turns it off once the quota is exhausted.
     const consume = useCallback(() => {
         setStatus((s) => (s.unlimited ? s : { ...s, used: s.used + 1 }));
         refresh();
@@ -112,10 +148,13 @@ export function usePremiumGeneration(): UsePremiumGenerationReturn {
     return {
         isSignedIn: Boolean(isSignedIn),
         available,
+        loading,
         enabled,
         used: effectiveStatus.used,
         limit: effectiveStatus.limit,
-        remaining: effectiveStatus.unlimited ? Infinity : Math.max(0, effectiveStatus.limit - effectiveStatus.used),
+        remaining: effectiveStatus.unlimited
+            ? Infinity
+            : Math.max(0, effectiveStatus.limit - effectiveStatus.used),
         unlimited: effectiveStatus.unlimited,
         toggle,
         consume,

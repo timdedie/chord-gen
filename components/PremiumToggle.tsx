@@ -16,6 +16,7 @@ interface PremiumToggleProps {
     enabled: boolean;
     onToggle: () => void;
     disabled?: boolean;
+    loading?: boolean;
 }
 
 const POP_SPRING = { type: "spring", stiffness: 640, damping: 22, mass: 0.7 } as const;
@@ -54,11 +55,12 @@ export default function PremiumToggle({
     enabled,
     onToggle,
     disabled,
+    loading,
 }: PremiumToggleProps) {
     const [burst, setBurst] = useState<{ id: number; particles: Particle[] } | null>(null);
     const reduceMotion = useReducedMotion();
 
-    const clickable = isSignedIn && (available || enabled) && !disabled;
+    const clickable = isSignedIn && (available || enabled) && !disabled && !loading;
 
     useEffect(() => {
         if (!burst) return;
@@ -75,13 +77,15 @@ export default function PremiumToggle({
         onToggle();
     };
 
-    const tooltipText = !isSignedIn
-        ? "Sign in to unlock premium"
-        : enabled
-            ? "Premium on — our most powerful model"
-            : available
-                ? "Premium — our most powerful model"
-                : "No premium left today";
+    const tooltipText = loading
+        ? "Checking premium…"
+        : !isSignedIn
+            ? "Sign in to unlock premium"
+            : enabled
+                ? "Premium on — our most powerful model"
+                : available
+                    ? "Premium — our most powerful model"
+                    : "No premium left today";
 
     return (
         <Tooltip>
@@ -110,7 +114,9 @@ export default function PremiumToggle({
                             ? "border-transparent text-white shadow-lg shadow-blue-600/40"
                             : clickable
                                 ? "border-gray-200 dark:border-gray-800 text-muted-foreground hover:text-blue-600 dark:hover:text-blue-500 hover:border-blue-400/70"
-                                : "border-gray-200 dark:border-gray-800 text-muted-foreground/30 cursor-not-allowed"
+                                : loading
+                                    ? "border-gray-200 dark:border-gray-800 text-muted-foreground/60 cursor-wait"
+                                    : "border-gray-200 dark:border-gray-800 text-muted-foreground/30 cursor-not-allowed"
                     )}
                 >
                     {/* Molten cobalt fill when active */}
@@ -208,14 +214,18 @@ export default function PremiumToggle({
                     <motion.span
                         className="relative z-10 flex"
                         animate={
-                            available && !enabled && clickable && !reduceMotion
-                                ? { rotate: [0, -12, 10, 0], scale: [1, 1.15, 1, 1] }
-                                : { rotate: 0, scale: 1 }
+                            loading && !reduceMotion
+                                ? { opacity: [0.4, 1, 0.4], rotate: 0, scale: 1 }
+                                : available && !enabled && clickable && !reduceMotion
+                                    ? { rotate: [0, -12, 10, 0], scale: [1, 1.15, 1, 1] }
+                                    : { rotate: 0, scale: 1, opacity: 1 }
                         }
                         transition={
-                            available && !enabled && clickable && !reduceMotion
-                                ? { duration: 0.9, repeat: Infinity, repeatDelay: 3.4, ease: "easeInOut" }
-                                : undefined
+                            loading && !reduceMotion
+                                ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
+                                : available && !enabled && clickable && !reduceMotion
+                                    ? { duration: 0.9, repeat: Infinity, repeatDelay: 3.4, ease: "easeInOut" }
+                                    : undefined
                         }
                     >
                         {/* Spring-loaded icon morph between states */}

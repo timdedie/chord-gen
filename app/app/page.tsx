@@ -121,6 +121,7 @@ export default function AppPage() {
                         <PremiumToggle
                             isSignedIn={premium.isSignedIn}
                             available={premium.available}
+                            loading={premium.loading}
                             enabled={premium.enabled}
                             onToggle={premium.toggle}
                             disabled={isNavigating}

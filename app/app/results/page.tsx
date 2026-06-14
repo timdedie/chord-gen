@@ -190,6 +190,7 @@ function ResultsContent() {
                 isLoading={isLoading}
                 premiumSignedIn={premium.isSignedIn}
                 premiumAvailable={premium.available}
+                premiumLoading={premium.loading}
                 premiumEnabled={premium.enabled}
                 onPremiumToggle={premium.toggle}
             />

@@ -16,6 +16,7 @@ interface SearchHeaderProps {
     isLoading: boolean;
     premiumSignedIn: boolean;
     premiumAvailable: boolean;
+    premiumLoading: boolean;
     premiumEnabled: boolean;
     onPremiumToggle: () => void;
 }
@@ -29,6 +30,7 @@ export default function SearchHeader({
     isLoading,
     premiumSignedIn,
     premiumAvailable,
+    premiumLoading,
     premiumEnabled,
     onPremiumToggle,
 }: SearchHeaderProps) {
@@ -68,6 +70,7 @@ export default function SearchHeader({
                     <PremiumToggle
                         isSignedIn={premiumSignedIn}
                         available={premiumAvailable}
+                        loading={premiumLoading}
                         enabled={premiumEnabled}
                         onToggle={onPremiumToggle}
                         disabled={isLoading}
