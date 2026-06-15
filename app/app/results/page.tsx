@@ -7,6 +7,7 @@ import { Plus} from "lucide-react";
 import dynamic from "next/dynamic";
 import SearchHeader from "@/components/SearchHeader";
 import ChordColumnsContainer from "@/components/ChordColumns/ChordColumnsContainer";
+import ProductHuntDialog from "@/components/ProductHuntDialog";
 
 const PianoKeyboard = dynamic(() => import("@/components/PianoKeyboard"), { ssr: false });
 import { usePiano } from "@/components/PianoProvider";
@@ -261,6 +262,8 @@ function ResultsContent() {
             <div className="fixed bottom-0 left-0 md:left-14 right-0 h-32 bg-gradient-to-t from-gray-50 dark:from-black to-transparent pointer-events-none z-20" />
 
             <PianoKeyboard firstNote={firstNote} lastNote={lastNote} activeNotes={activeNotes} />
+
+            <ProductHuntDialog trigger={!isLoading && progressions.length > 0} />
         </div>
     );
 }
