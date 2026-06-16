@@ -3,7 +3,9 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useTheme } from "next-themes";
 import { Sparkles, ArrowRight } from "lucide-react";
+import { generateChordColors, getChordHue } from "@/lib/chordColors";
 import { cn } from "@/lib/utils";
 
 interface SceneChord {
@@ -66,13 +68,21 @@ type Phase = "typing" | "thinking" | "playing" | "resetting";
 
 export default function HeroDemo() {
     const reduceMotion = useReducedMotion();
+    const { resolvedTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
     const [sceneIdx, setSceneIdx] = useState(0);
     const [typedLen, setTypedLen] = useState(0);
     const [phase, setPhase] = useState<Phase>("typing");
     const [step, setStep] = useState(-1);
 
+    useEffect(() => setMounted(true), []);
+
     const scene = SCENES[sceneIdx];
     const staticMode = !!reduceMotion;
+    const isDark = mounted && resolvedTheme === "dark";
+
+    const chordNames = scene.chords.map((c) => c.name);
+    const chordColors = generateChordColors(chordNames, isDark);
 
     useEffect(() => {
         if (staticMode) return;
@@ -112,14 +122,15 @@ export default function HeroDemo() {
             : -1;
     const activeNotes = new Set(activeChord >= 0 ? scene.chords[activeChord].notes : []);
 
+    // Vivid key fill derived from the active chord's root-note hue.
+    const activeHue = activeChord >= 0 ? getChordHue(scene.chords[activeChord].name) : null;
+    const whiteKeyFill =
+        activeHue !== null ? `hsl(${activeHue}, 72%, ${isDark ? 56 : 62}%)` : undefined;
+    const blackKeyFill =
+        activeHue !== null ? `hsl(${activeHue}, 70%, ${isDark ? 44 : 46}%)` : undefined;
+
     return (
         <div className="relative mx-auto w-full max-w-2xl">
-            {/* Soft glow behind the card */}
-            <div
-                aria-hidden
-                className="absolute -inset-8 rounded-[3rem] bg-blue-500/[0.06] dark:bg-blue-500/[0.05] blur-3xl"
-            />
-
             <motion.div
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -132,19 +143,16 @@ export default function HeroDemo() {
                     <span className="flex-1 truncate text-left text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100">
                         {shownPrompt}
                         {!staticMode && phase === "typing" && (
-                            <span className="animate-caret ml-px inline-block h-4 w-[2px] translate-y-[3px] bg-blue-600 dark:bg-blue-500" />
+                            <span className="animate-caret ml-px inline-block h-4 w-[2px] translate-y-[3px] bg-gray-900 dark:bg-white" />
                         )}
                     </span>
-                    <span
-                        className={cn(
-                            "hidden sm:inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-300",
-                            phase === "thinking"
-                                ? "bg-blue-600 text-white"
-                                : "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                        )}
+                    <motion.span
+                        animate={{ opacity: phase === "thinking" ? [1, 0.5, 1] : 1 }}
+                        transition={{ duration: 0.9, repeat: phase === "thinking" ? Infinity : 0 }}
+                        className="hidden sm:inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                     >
                         Generate
-                    </span>
+                    </motion.span>
                 </div>
 
                 {/* Chord chips / thinking dots */}
@@ -176,7 +184,7 @@ export default function HeroDemo() {
                                 {[0, 1, 2].map((i) => (
                                     <motion.span
                                         key={i}
-                                        className="h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-500"
+                                        className="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500"
                                         animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
                                         transition={{
                                             duration: 0.7,
@@ -199,29 +207,38 @@ export default function HeroDemo() {
                                 }}
                                 className="flex gap-2"
                             >
-                                {scene.chords.map((chord, i) => (
-                                    <motion.span
-                                        key={chord.name}
-                                        variants={{
-                                            hidden: { opacity: 0, y: 10, scale: 0.9 },
-                                            visible: { opacity: 1, y: 0, scale: 1 },
-                                        }}
-                                        animate={
-                                            i === activeChord
-                                                ? { scale: 1.08, y: -2 }
-                                                : { scale: 1, y: 0 }
-                                        }
-                                        transition={{ type: "spring", stiffness: 500, damping: 26 }}
-                                        className={cn(
-                                            "font-mono-accent inline-flex h-9 items-center rounded-xl border px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-colors duration-200",
-                                            i === activeChord
-                                                ? "border-transparent bg-gray-900 text-white shadow-md dark:bg-white dark:text-gray-900"
-                                                : "border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300"
-                                        )}
-                                    >
-                                        {chord.name}
-                                    </motion.span>
-                                ))}
+                                {scene.chords.map((chord, i) => {
+                                    const c = chordColors[i];
+                                    const isActive = i === activeChord;
+                                    return (
+                                        <motion.span
+                                            key={chord.name}
+                                            variants={{
+                                                hidden: { opacity: 0, y: 10, scale: 0.9 },
+                                                visible: { opacity: 1, y: 0, scale: 1 },
+                                            }}
+                                            animate={isActive ? { scale: 1.08, y: -2 } : { scale: 1, y: 0 }}
+                                            transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                                            className={cn(
+                                                "font-mono-accent inline-flex h-9 items-center rounded-xl border px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-colors duration-200",
+                                                !isActive &&
+                                                    "border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300"
+                                            )}
+                                            style={
+                                                isActive
+                                                    ? {
+                                                          backgroundColor: c?.bg,
+                                                          color: c?.text,
+                                                          borderColor: "transparent",
+                                                          boxShadow: "0 6px 16px -6px rgba(0,0,0,0.25)",
+                                                      }
+                                                    : undefined
+                                            }
+                                        >
+                                            {chord.name}
+                                        </motion.span>
+                                    );
+                                })}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -230,33 +247,39 @@ export default function HeroDemo() {
                 {/* Mini piano */}
                 <div className="relative mt-4 sm:mt-5 h-24 sm:h-32" aria-hidden>
                     <div className="flex h-full gap-[3px]">
-                        {WHITE_KEYS.map((st) => (
+                        {WHITE_KEYS.map((st) => {
+                            const on = activeNotes.has(st);
+                            return (
+                                <div
+                                    key={st}
+                                    className={cn(
+                                        "flex-1 rounded-b-md border transition-colors duration-150",
+                                        on
+                                            ? "border-black/10 shadow-[inset_0_-4px_8px_rgba(0,0,0,0.15)]"
+                                            : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                    )}
+                                    style={on ? { backgroundColor: whiteKeyFill } : undefined}
+                                />
+                            );
+                        })}
+                    </div>
+                    {BLACK_KEYS.map(({ st, pos }) => {
+                        const on = activeNotes.has(st);
+                        return (
                             <div
                                 key={st}
                                 className={cn(
-                                    "flex-1 rounded-b-md border border-gray-200 dark:border-gray-700 transition-colors duration-150",
-                                    activeNotes.has(st)
-                                        ? "bg-blue-500 border-blue-600 shadow-[inset_0_-4px_8px_rgba(0,0,0,0.15)]"
-                                        : "bg-white dark:bg-gray-800"
+                                    "absolute top-0 h-[58%] rounded-b-md transition-colors duration-150",
+                                    !on && "bg-gray-900 dark:bg-black border border-gray-700"
                                 )}
+                                style={{
+                                    left: `calc(${pos + 1} * (100% / 14) - (100% / 14) * 0.32)`,
+                                    width: `calc((100% / 14) * 0.64)`,
+                                    ...(on ? { backgroundColor: blackKeyFill } : {}),
+                                }}
                             />
-                        ))}
-                    </div>
-                    {BLACK_KEYS.map(({ st, pos }) => (
-                        <div
-                            key={st}
-                            className={cn(
-                                "absolute top-0 h-[58%] rounded-b-md transition-colors duration-150",
-                                activeNotes.has(st)
-                                    ? "bg-blue-600"
-                                    : "bg-gray-900 dark:bg-black border border-gray-700"
-                            )}
-                            style={{
-                                left: `calc(${pos + 1} * (100% / 14) - (100% / 14) * 0.32)`,
-                                width: `calc((100% / 14) * 0.64)`,
-                            }}
-                        />
-                    ))}
+                        );
+                    })}
                 </div>
             </motion.div>
 

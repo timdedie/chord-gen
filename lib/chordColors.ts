@@ -20,6 +20,12 @@ function getRootNote(chord: string): string | null {
   return match ? match[1] : null;
 }
 
+/** The hue (0–360) the app assigns to a chord based on its root note. */
+export function getChordHue(chord: string): number {
+  const root = getRootNote(chord);
+  return root && ROOT_NOTE_HUES[root] !== undefined ? ROOT_NOTE_HUES[root] : 220;
+}
+
 function relativeLuminance(h: number, s: number, l: number): number {
   s /= 100;
   l /= 100;
