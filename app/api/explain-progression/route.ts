@@ -1,7 +1,7 @@
 export const maxDuration = 60;
 
 import { auth } from '@clerk/nextjs/server';
-import { streamText, CoreMessage } from 'ai';
+import { streamText, ModelMessage } from 'ai';
 import { deepseek, STANDARD_MODEL_ID } from '@/lib/ai';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { getUserRole } from '@/lib/premium';
@@ -54,7 +54,7 @@ For example, for C - G - Am - F: "This progression in **C Major** uses **G** (do
 For Dm7 - G7 - Cmaj7: "A classic **ii-V-I** in C Major. **Dm7** leads to the tension of **G7** (dominant), which strongly resolves to the stable **Cmaj7** (tonic). Fundamental in jazz."
 `.trim();
 
-        const messages: CoreMessage[] = [
+        const messages: ModelMessage[] = [
             { role: 'user', content: userMessageContent }
         ];
 
@@ -63,7 +63,7 @@ For Dm7 - G7 - Cmaj7: "A classic **ii-V-I** in C Major. **Dm7** leads to the ten
             system: systemMessage,
             messages: messages,
             temperature: 0.6,
-            maxTokens: 300,
+            maxOutputTokens: 300,
         });
 
         return result.toTextStreamResponse();

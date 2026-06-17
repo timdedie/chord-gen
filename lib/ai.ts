@@ -1,5 +1,8 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { generateObject, CoreMessage } from 'ai';
+// DeepSeek doesn't support native JSON schema; SDK falls back to system message injection — expected.
+(globalThis as Record<string, unknown>).AI_SDK_LOG_WARNINGS = false;
+
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { generateObject, ModelMessage } from 'ai';
 import { z } from 'zod';
 import { CHORD_FORMATTING_RULES } from './schemas';
 
@@ -8,23 +11,7 @@ if (!DEEPSEEK_API_KEY) {
     throw new Error("DEEPSEEK_API_KEY environment variable is not set.");
 }
 
-export const deepseek = createOpenAI({
-    baseURL: 'https://api.deepseek.com',
-    apiKey: DEEPSEEK_API_KEY,
-    fetch: async (url, options) => {
-        if (options?.body) {
-            const body = JSON.parse(options.body as string);
-            if (body.model === PREMIUM_MODEL_ID) {
-                body.thinking = { type: 'enabled' };
-                body.reasoning_effort = 'low';
-            } else {
-                body.thinking = { type: 'disabled' };
-            }
-            options = { ...options, body: JSON.stringify(body) };
-        }
-        return fetch(url, options);
-    },
-});
+export const deepseek = createDeepSeek({ apiKey: DEEPSEEK_API_KEY });
 
 export const STANDARD_MODEL_ID = 'deepseek-v4-flash';
 export const PREMIUM_MODEL_ID = 'deepseek-v4-pro';
@@ -76,7 +63,9 @@ export async function generateChordObject<T extends z.ZodTypeAny>(
     modelId: string = STANDARD_MODEL_ID,
 ): Promise<z.infer<T>> {
     const modelClient = deepseek(modelId);
-    const messages: CoreMessage[] = [{ role: 'user', content: userMessage }];
+    const isPremium = modelId === PREMIUM_MODEL_ID;
+    console.log(`[generateChordObject] model=${modelId} isPremium=${isPremium} thinking=off`);
+    const messages: ModelMessage[] = [{ role: 'user', content: userMessage }];
     const allErrors: { attempt: number; error: string; response?: unknown }[] = [];
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -87,7 +76,13 @@ export async function generateChordObject<T extends z.ZodTypeAny>(
                 system: SYSTEM_PROMPT,
                 messages,
                 temperature,
-                mode: 'json',
+                // Thinking off for both models — DeepSeek has no light reasoning tier
+                // (low/medium map to high), so any thinking blows the latency budget.
+                providerOptions: {
+                    deepseek: {
+                        thinking: { type: 'disabled' },
+                    },
+                },
             });
 
             const parsed = schema.safeParse(object);
