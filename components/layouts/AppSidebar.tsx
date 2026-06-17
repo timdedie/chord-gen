@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight, SquarePen, Moon, Sun, Monitor, User, Settings, Heart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, SquarePen, Moon, Sun, Monitor, User, Settings, Heart, Coffee } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -63,8 +63,11 @@ export function AppSidebar() {
 
     return (
         <aside
+            onClick={() => {
+                if (collapsed) setCollapsed(false);
+            }}
             className={`hidden md:flex flex-col fixed top-0 left-0 h-screen bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 transition-all duration-200 z-40 ${
-                collapsed ? 'w-14' : 'w-56'
+                collapsed ? 'w-14 cursor-pointer' : 'w-56'
             }`}
         >
             {/* Top section: Logo and collapse toggle */}
@@ -85,7 +88,10 @@ export function AppSidebar() {
                 <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setCollapsed(!collapsed);
+                    }}
                     className="h-8 w-8 flex-shrink-0"
                     aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 >
@@ -127,8 +133,32 @@ export function AppSidebar() {
                 </Button>
             </nav>
 
-            {/* Bottom section: Settings → Account */}
+            {/* Bottom section: Buy me a coffee → Settings → Account */}
             <div className="flex flex-col gap-1 p-2 pb-3">
+                {!collapsed && (
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button variant="ghost" className="w-full justify-start">
+                                <Coffee className="h-4 w-4 flex-shrink-0" />
+                                <span className="ml-2">Buy me a coffee</span>
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-sm">
+                            <DialogHeader>
+                                <DialogTitle>buy me a coffee :)</DialogTitle>
+                            </DialogHeader>
+                            <p className="text-sm text-muted-foreground lowercase">
+                                i&apos;m trying to keep chordgen running for free, but if you&apos;d like to help out here&apos;s my paypal. thank you :)
+                            </p>
+                            <Button asChild className="w-full mt-2">
+                                <a href="https://www.paypal.com/paypalme/timdedie" target="_blank" rel="noopener noreferrer">
+                                    <Image src="/paypal/paypal-logo.png" alt="PayPal" width={18} height={18} className="h-[18px] w-[18px] object-contain" />
+                                    <span className="ml-2">Buy me a coffee on PayPal</span>
+                                </a>
+                            </Button>
+                        </DialogContent>
+                    </Dialog>
+                )}
                 {/* Settings */}
                 <Dialog>
                     <DialogTrigger asChild>
