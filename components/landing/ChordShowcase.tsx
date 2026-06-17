@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { Play, Sparkles, Download } from "lucide-react";
 import { generateChordColors } from "@/lib/chordColors";
 import { cn } from "@/lib/utils";
+import { useMounted } from "@/hooks/useMounted";
 
 const replaceAccidentals = (str: string) =>
     str.replace(/b/g, "♭").replace(/#/g, "♯");
@@ -55,8 +56,7 @@ interface ChordShowcaseProps {
 export default function ChordShowcase({ prompt, title, chords }: ChordShowcaseProps) {
     const { resolvedTheme } = useTheme();
     const reduceMotion = useReducedMotion();
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => setMounted(true), []);
+    const mounted = useMounted();
 
     const isDark = mounted && resolvedTheme === "dark";
     const colors = generateChordColors(chords, isDark);

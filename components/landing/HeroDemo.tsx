@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { Sparkles, ArrowRight } from "lucide-react";
 import { generateChordColors, getChordHue } from "@/lib/chordColors";
 import { cn } from "@/lib/utils";
+import { useMounted } from "@/hooks/useMounted";
 
 interface SceneChord {
     name: string;
@@ -69,13 +70,11 @@ type Phase = "typing" | "thinking" | "playing" | "resetting";
 export default function HeroDemo() {
     const reduceMotion = useReducedMotion();
     const { resolvedTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
+    const mounted = useMounted();
     const [sceneIdx, setSceneIdx] = useState(0);
     const [typedLen, setTypedLen] = useState(0);
     const [phase, setPhase] = useState<Phase>("typing");
     const [step, setStep] = useState(-1);
-
-    useEffect(() => setMounted(true), []);
 
     const scene = SCENES[sceneIdx];
     const staticMode = !!reduceMotion;
