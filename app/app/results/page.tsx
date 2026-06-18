@@ -200,7 +200,7 @@ function ResultsContent() {
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors duration-300">
             {/* Top gradient */}
-            <div className="fixed top-0 left-0 md:left-14 right-0 h-12 bg-gradient-to-b from-gray-50 dark:from-black to-transparent pointer-events-none z-20" />
+            <div className="fixed top-0 left-0 right-0 h-12 bg-gradient-to-b from-gray-50 dark:from-black to-transparent pointer-events-none z-20 transition-[left] duration-200 md:left-[var(--sidebar-w,3.5rem)]" />
 
             <SearchHeader
                 prompt={prompt}
@@ -279,7 +279,7 @@ function ResultsContent() {
             </main>
 
             {/* Bottom gradient above piano */}
-            <div className="fixed bottom-0 left-0 md:left-14 right-0 h-32 bg-gradient-to-t from-gray-50 dark:from-black to-transparent pointer-events-none z-20" />
+            <div className="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-gray-50 dark:from-black to-transparent pointer-events-none z-20 transition-[left] duration-200 md:left-[var(--sidebar-w,3.5rem)]" />
 
             <PianoKeyboard firstNote={firstNote} lastNote={lastNote} activeNotes={activeNotes} />
         </div>

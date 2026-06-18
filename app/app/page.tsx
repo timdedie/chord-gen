@@ -102,7 +102,7 @@ export default function AppPage() {
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder="Describe a mood, style, or genre..."
-                            className="flex-grow h-12 text-lg px-4 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                            className="flex-grow h-12 text-lg px-4 border-0 bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
                             disabled={isNavigating}
                             aria-label="Chord progression description"
                             maxLength={200}

@@ -255,7 +255,7 @@ export default function HeroDemo() {
                                         "flex-1 rounded-b-md border transition-colors duration-150",
                                         on
                                             ? "border-black/10 shadow-[inset_0_-4px_8px_rgba(0,0,0,0.15)]"
-                                            : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                            : "border-gray-300 bg-white dark:border-gray-400 dark:bg-gray-200"
                                     )}
                                     style={on ? { backgroundColor: whiteKeyFill } : undefined}
                                 />

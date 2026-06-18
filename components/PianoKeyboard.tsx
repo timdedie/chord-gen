@@ -62,7 +62,7 @@ export default function PianoKeyboard({
         .filter((midi): midi is number => midi !== null);
 
     return (
-        <div className={`fixed bottom-0 left-0 md:left-14 right-0 flex justify-center z-30 ${isMobile ? 'p-2' : 'p-4'}`}>
+        <div className={`fixed bottom-0 left-0 right-0 flex justify-center z-30 transition-[left] duration-200 md:left-[var(--sidebar-w,3.5rem)] ${isMobile ? 'p-2' : 'p-4'}`}>
             <div className={`w-full ${isMobile ? 'max-w-[180px]' : 'max-w-[400px]'} bg-transparent`}>
                 <div className="bg-transparent drop-shadow-lg">
                     <Piano

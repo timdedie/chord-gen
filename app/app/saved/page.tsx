@@ -30,7 +30,7 @@ export default function SavedPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors duration-300">
-            <div className="fixed top-0 left-0 md:left-14 right-0 h-12 bg-gradient-to-b from-gray-50 dark:from-black to-transparent pointer-events-none z-20" />
+            <div className="fixed top-0 left-0 right-0 h-12 bg-gradient-to-b from-gray-50 dark:from-black to-transparent pointer-events-none z-20 transition-[left] duration-200 md:left-[var(--sidebar-w,3.5rem)]" />
 
             <main className="container max-w-6xl mx-auto px-4 pt-16 pb-48">
                 <div className="flex items-center gap-3 mb-8">
@@ -85,7 +85,7 @@ export default function SavedPage() {
                 )}
             </main>
 
-            <div className="fixed bottom-0 left-0 md:left-14 right-0 h-32 bg-gradient-to-t from-gray-50 dark:from-black to-transparent pointer-events-none z-20" />
+            <div className="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-gray-50 dark:from-black to-transparent pointer-events-none z-20 transition-[left] duration-200 md:left-[var(--sidebar-w,3.5rem)]" />
             <PianoKeyboard firstNote={firstNote} lastNote={lastNote} activeNotes={activeNotes} />
         </div>
     );

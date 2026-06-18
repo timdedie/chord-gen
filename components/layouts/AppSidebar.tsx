@@ -21,11 +21,12 @@ import {
 } from '@/components/ui/dialog';
 import { useUser, UserButton, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { capture, AnalyticsEvent } from '@/lib/analytics/events';
+import { useSidebar } from '@/components/layouts/SidebarProvider';
 
 type Theme = 'light' | 'dark' | 'system';
 
 export function AppSidebar() {
-    const [collapsed, setCollapsed] = useState(true);
+    const { collapsed, setCollapsed } = useSidebar();
     const [theme, setTheme] = useState<Theme>('system');
     const { isSignedIn, isLoaded } = useUser();
 
