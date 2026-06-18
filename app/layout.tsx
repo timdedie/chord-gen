@@ -21,6 +21,12 @@ const outfit = Outfit({
 
 const unifiedDescription = 'Describe a mood, genre, or feeling, and our AI instantly generates unique chord progressions. Visualize on piano, edit, and download free MIDI files for any DAW.';
 
+// Domain guard: defeats naive reverse-proxy mirrors (e.g. chord.lyricstosongai.com)
+// by bouncing any non-allowlisted hostname back to the canonical site. Runs
+// synchronously during parse, before hydration, so a verbatim proxy of our HTML
+// redirects the visitor away.
+const domainGuard = `(function(){try{var h=location.hostname;if(h==='www.chordgen.org'||h==='chordgen.org'||h==='localhost'||h==='127.0.0.1'||h.endsWith('.vercel.app'))return;location.replace('https://www.chordgen.org'+location.pathname+location.search+location.hash);}catch(e){}})();`;
+
 const webAppSchema = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -105,6 +111,7 @@ export default function RootLayout({ children }: { children: React.ReactNode; })
         <ClerkProvider>
             <html lang="en">
             <body className={`${outfit.className} bg-gray-50 dark:bg-black`}>
+                <script dangerouslySetInnerHTML={{ __html: domainGuard }} />
                 <PostHogProvider>
                     {children}
                 </PostHogProvider>
