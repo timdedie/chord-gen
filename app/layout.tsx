@@ -7,6 +7,7 @@ import Script from "next/script";
 import React from "react";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ClerkProvider } from "@clerk/nextjs";
+import PostHogProvider from "@/components/providers/PostHogProvider";
 
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata } from 'next';
@@ -104,7 +105,9 @@ export default function RootLayout({ children }: { children: React.ReactNode; })
         <ClerkProvider>
             <html lang="en">
             <body className={`${outfit.className} bg-gray-50 dark:bg-black`}>
-                {children}
+                <PostHogProvider>
+                    {children}
+                </PostHogProvider>
                 <Analytics />
                 <SpeedInsights />
                 <SonnerToaster richColors position="bottom-right" />

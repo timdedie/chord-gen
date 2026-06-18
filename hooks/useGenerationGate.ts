@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useUser } from '@clerk/nextjs';
+import { capture, AnalyticsEvent } from '@/lib/analytics/events';
 
 const STORAGE_KEY = 'chordgen_guest_usage';
 const FREE_LIMIT = 5;
@@ -46,6 +47,7 @@ export function useGenerationGate(): UseGenerationGateReturn {
         if (isSignedIn) return true;
         const { count } = getUsage();
         if (count < FREE_LIMIT) return true;
+        capture(AnalyticsEvent.PaywallShown, { free_limit: FREE_LIMIT, count });
         setPaywallOpen(true);
         return false;
     }, [isLoaded, isSignedIn, getUsage]);

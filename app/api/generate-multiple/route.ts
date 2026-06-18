@@ -7,6 +7,7 @@ import { generateChordObject, createResponse, STANDARD_MODEL_ID, PREMIUM_MODEL_I
 import { getUserRole } from '@/lib/premium';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multiple';
+import { captureServer } from '@/lib/analytics/posthog-server';
 
 export const runtime = 'edge';
 export const maxDuration = 25;
@@ -81,6 +82,21 @@ export async function POST(request: Request): Promise<Response> {
             chords: prog.chords,
             style: prog.style,
         }));
+
+        // Server-side truth for the funnel: fires even when client events are
+        // blocked by adblock, and carries server-only context (model, role,
+        // whether a premium slot was actually granted). distinct_id matches the
+        // Clerk userId we identify on the client; anonymous users get a stable
+        // guest bucket so the event still lands in the funnel.
+        await captureServer('generation_succeeded', userId ?? 'anonymous', {
+            num_chords: count,
+            model: modelId,
+            premium_requested: !!premium,
+            premium_granted: premiumGranted,
+            role,
+            is_generate_more: Array.isArray(existingProgressions) && existingProgressions.length > 0,
+            progression_count: progressionsWithIds.length,
+        });
 
         return createResponse({ progressions: progressionsWithIds, premiumUsed: premiumGranted, unlimitedPremium });
 

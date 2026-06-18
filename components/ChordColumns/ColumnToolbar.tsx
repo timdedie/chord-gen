@@ -22,6 +22,7 @@ import {
 import { SignInButton } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
+import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 
 const MidiDownloaderInline = dynamic(
   () => import("@/components/MidiDownloader"),
@@ -99,11 +100,29 @@ export default function ColumnToolbar({
   onSendFeedback,
   isEditSubmitting,
 }: ColumnToolbarProps) {
+  const handleSendFeedback = () => {
+    capture(AnalyticsEvent.ProgressionEdited, {
+      style,
+      chord_count: chords.length,
+      feedback_length: editFeedback.length,
+    });
+    onSendFeedback();
+  };
+
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-background/80 backdrop-blur-sm border-b border-border/50">
       <div className="flex items-center gap-3">
         <Button
-          onClick={onTogglePlayPause}
+          onClick={() => {
+            // Only count starts, not pauses, as a "play".
+            if (!isPlaying) {
+              capture(AnalyticsEvent.ProgressionPlayed, {
+                style,
+                chord_count: chords.length,
+              });
+            }
+            onTogglePlayPause();
+          }}
           variant="ghost"
           size="icon"
           className="relative w-9 h-9 rounded-full"
@@ -188,7 +207,7 @@ export default function ColumnToolbar({
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (editFeedback.trim() && !isEditSubmitting) {
-                    onSendFeedback();
+                    handleSendFeedback();
                   }
                 }
               }}
@@ -199,7 +218,7 @@ export default function ColumnToolbar({
             <div className="flex justify-end mt-2">
               <Button
                 size="sm"
-                onClick={onSendFeedback}
+                onClick={handleSendFeedback}
                 disabled={!editFeedback.trim() || isEditSubmitting}
               >
                 <Send className="h-3.5 w-3.5 mr-1" />
@@ -216,7 +235,13 @@ export default function ColumnToolbar({
             <Button
               variant="ghost"
               size="sm"
-              onClick={onExplainClick}
+              onClick={() => {
+                capture(AnalyticsEvent.ProgressionExplained, {
+                  style,
+                  chord_count: chords.length,
+                });
+                onExplainClick();
+              }}
               disabled={isExplanationLoading}
             >
               {isExplanationLoading ? (

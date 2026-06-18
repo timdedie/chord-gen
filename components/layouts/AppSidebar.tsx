@@ -20,6 +20,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { useUser, UserButton, SignInButton, SignUpButton } from '@clerk/nextjs';
+import { capture, AnalyticsEvent } from '@/lib/analytics/events';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -151,7 +152,7 @@ export function AppSidebar() {
                                 i&apos;m trying to keep chordgen running for free, but if you&apos;d like to help out here&apos;s my paypal. thank you :)
                             </p>
                             <Button asChild className="w-full mt-2">
-                                <a href="https://www.paypal.com/paypalme/timdedie" target="_blank" rel="noopener noreferrer">
+                                <a href="https://www.paypal.com/paypalme/timdedie" target="_blank" rel="noopener noreferrer" onClick={() => capture(AnalyticsEvent.PaypalSupportClicked, { source: 'sidebar' })}>
                                     <Image src="/paypal/paypal-logo.png" alt="PayPal" width={18} height={18} className="h-[18px] w-[18px] object-contain" />
                                     <span className="ml-2">Buy me a coffee on PayPal</span>
                                 </a>

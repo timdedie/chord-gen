@@ -6,6 +6,7 @@ import { Download } from "lucide-react";
 import MidiWriter from "midi-writer-js";
 import { Chord } from "tonal";
 import { toast } from "sonner";
+import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 
 interface MidiDownloaderProps {
     chords: string[];
@@ -84,6 +85,11 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({ chords, prompt, compact
         }
         toast.success("Download Started!", {
             description: "Drag the MIDI file into your DAW to use it.",
+        });
+        // The activation / "value moment" — user is taking a progression into a DAW.
+        capture(AnalyticsEvent.MidiExported, {
+            chord_count: chords.length,
+            prompt_length: prompt.length,
         });
     };
 

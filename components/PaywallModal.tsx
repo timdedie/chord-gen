@@ -10,6 +10,7 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { capture, AnalyticsEvent } from '@/lib/analytics/events';
 
 interface PaywallModalProps {
     open: boolean;
@@ -31,13 +32,22 @@ export function PaywallModal({ open, onOpenChange }: PaywallModalProps) {
 
                 <div className="flex flex-col gap-2 pt-2">
                     <SignUpButton mode="modal">
-                        <Button className="w-full rounded-full font-semibold" size="lg">
+                        <Button
+                            className="w-full rounded-full font-semibold"
+                            size="lg"
+                            onClick={() => capture(AnalyticsEvent.PaywallCtaClicked, { cta: 'sign_up' })}
+                        >
                             Create free account
                         </Button>
                     </SignUpButton>
 
                     <SignInButton mode="modal">
-                        <Button variant="outline" className="w-full rounded-full" size="lg">
+                        <Button
+                            variant="outline"
+                            className="w-full rounded-full"
+                            size="lg"
+                            onClick={() => capture(AnalyticsEvent.PaywallCtaClicked, { cta: 'sign_in' })}
+                        >
                             Sign in
                         </Button>
                     </SignInButton>

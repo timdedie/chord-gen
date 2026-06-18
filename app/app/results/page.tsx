@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
+import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 
 interface ProgressionData {
     id: string;
@@ -51,6 +52,12 @@ function ResultsContent() {
         setIsLoading(true);
         setProgressions([]);
 
+        capture(AnalyticsEvent.GenerationRequested, {
+            num_chords: queryNumChords,
+            premium: usePremium,
+            prompt_length: queryPrompt.length,
+        });
+
         // Load samples if not loaded
         if (!areSamplesLoaded && !isLoadingSamples) {
             loadSamples();
@@ -71,6 +78,11 @@ function ResultsContent() {
 
             if (!res.ok || data.error) {
                 console.error("Generation error:", data.error);
+                capture(AnalyticsEvent.GenerationFailed, {
+                    status: res.status,
+                    error: data.error ?? "unknown",
+                    premium: usePremium,
+                });
                 setIsLoading(false);
                 return;
             }
@@ -86,6 +98,10 @@ function ResultsContent() {
             }
         } catch (err) {
             console.error("Network error:", err);
+            capture(AnalyticsEvent.GenerationFailed, {
+                error: "network_error",
+                premium: usePremium,
+            });
         }
 
         setIsLoading(false);
@@ -119,6 +135,11 @@ function ResultsContent() {
         if (!prompt.trim() || isLoadingMore) return;
 
         setIsLoadingMore(true);
+
+        capture(AnalyticsEvent.GenerateMoreClicked, {
+            num_chords: numChords,
+            existing_count: progressions.length,
+        });
 
         try {
             const existingProgressions = progressions.map((p) => ({

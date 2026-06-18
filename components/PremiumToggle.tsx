@@ -9,6 +9,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 
 interface PremiumToggleProps {
     isSignedIn: boolean;
@@ -70,6 +71,7 @@ export default function PremiumToggle({
 
     const handleClick = () => {
         if (!clickable) return;
+        capture(AnalyticsEvent.PremiumToggled, { enabling: !enabled });
         if (!enabled) {
             if (!reduceMotion) setBurst({ id: Date.now(), particles: makeBurst() });
             navigator.vibrate?.(12);

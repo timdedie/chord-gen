@@ -52,6 +52,16 @@ Required in `.env.local`:
 - `DEEPSEEK_API_KEY` - DeepSeek API key (primary LLM)
 - `GOOGLE_GENERATIVE_AI_API_KEY` - Google GenAI (optional)
 
+Optional (analytics — everything no-ops cleanly if unset):
+- `NEXT_PUBLIC_POSTHOG_KEY` - PostHog project API key
+- `NEXT_PUBLIC_POSTHOG_HOST` - PostHog host (defaults to `https://us.i.posthog.com`)
+
+### Analytics (PostHog)
+
+- Client init/identify lives in `components/providers/PostHogProvider.tsx` (mounted in `app/layout.tsx`). Uses `person_profiles: 'identified_only'`, manual SPA `$pageview` capture, and ties identity to Clerk (`identify` on sign-in with `role`, `reset` on sign-out).
+- Client events go through the typed `capture()` helper + `AnalyticsEvent` catalog in `lib/analytics/events.ts`.
+- Server events use `captureServer()` in `lib/analytics/posthog-server.ts` (direct `fetch` to PostHog — edge-runtime safe). `generate-multiple` fires `generation_succeeded` with model/role/premium context, keyed on the Clerk userId so it joins the same person as client events.
+
 ## Conventions
 
 - Path alias: `@/*` maps to project root
