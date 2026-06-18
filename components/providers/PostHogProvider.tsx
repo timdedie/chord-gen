@@ -7,12 +7,23 @@ import posthog from "posthog-js";
 import { PostHogProvider as PHProvider } from "posthog-js/react";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+// Default to EU cloud, not US — we're EU-hosted to keep data under EU
+// jurisdiction (no third-country transfer). Override via env only if you
+// know the project lives in a different region.
 const POSTHOG_HOST =
-    process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+    process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com";
 
 if (typeof window !== "undefined" && POSTHOG_KEY && !posthog.__loaded) {
     posthog.init(POSTHOG_KEY, {
         api_host: POSTHOG_HOST,
+        // Cookieless: keep all state in memory, never touch cookies or
+        // localStorage. This sidesteps the German §25 TDDDG consent
+        // requirement (which is about storing data on the user's device),
+        // so we can run analytics without a cookie banner. Trade-off: a
+        // returning visitor isn't recognised across sessions — anonymous
+        // distinct_ids regenerate each load and identity only persists
+        // within a single session.
+        persistence: "memory",
         // Only create billable person profiles for users we actually identify
         // (i.e. signed-in Clerk users). Anonymous visitors still generate
         // events but don't burn into the person count — important at a
