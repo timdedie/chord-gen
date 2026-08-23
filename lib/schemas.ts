@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Chord } from 'tonal';
+import { MAX_CHORDS, MIN_CHORDS } from './prompts/chordCount';
 
 /**
  * Validates a chord symbol string.
@@ -29,11 +30,25 @@ export const createProgressionSchema = (numChords: number) => z.object({
         .describe(`A ${numChords}-chord progression.`),
 });
 
-export const createMultipleProgressionsSchema = (numChords: number) => z.object({
+/**
+ * `allowLengthChange` relaxes the exact-count rule to the 2-8 range. Used for
+ * feedback rounds: the user may be asking for a different length ("make it 6
+ * chords"), and a hard `.length()` would reject the model's correct answer
+ * until the request ran out of retries.
+ */
+export const createMultipleProgressionsSchema = (
+    numChords: number,
+    { allowLengthChange = false }: { allowLengthChange?: boolean } = {},
+) => z.object({
     progressions: z.array(z.object({
-        chords: z.array(ValidChordStringSchema)
-            .length(numChords)
-            .describe(`A ${numChords}-chord progression.`),
+        chords: allowLengthChange
+            ? z.array(ValidChordStringSchema)
+                .min(MIN_CHORDS)
+                .max(MAX_CHORDS)
+                .describe(`A chord progression — ${numChords} chords unless the user's feedback asks for a different length (${MIN_CHORDS}-${MAX_CHORDS}).`)
+            : z.array(ValidChordStringSchema)
+                .length(numChords)
+                .describe(`A ${numChords}-chord progression.`),
         style: z.string()
             .describe("A 2-4 word style label (e.g. 'Warm Jazz', 'Dark Cinematic')"),
     }))
@@ -43,8 +58,8 @@ export const createMultipleProgressionsSchema = (numChords: number) => z.object(
 
 export const EditProgressionSchema = z.object({
     chords: z.array(ValidChordStringSchema)
-        .min(2)
-        .max(8)
+        .min(MIN_CHORDS)
+        .max(MAX_CHORDS)
         .describe("The revised chord progression, incorporating the user's requested changes."),
 });
 

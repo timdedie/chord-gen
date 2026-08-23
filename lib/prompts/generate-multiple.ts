@@ -24,11 +24,18 @@ export function buildMultipleProgressionsMessage(
     prompt: string,
     numChords: number,
     history?: GenerationRound[],
-    feedback?: string
+    feedback?: string,
+    /** Set when the feedback asked for a different length than the round before it. */
+    previousNumChords?: number
 ): string {
     const historySection = history && history.length > 0 ? buildHistorySection(history) : '';
 
     const priorFeedback = collectFeedback(history ?? []);
+
+    const changedLength = typeof previousNumChords === 'number' && previousNumChords !== numChords;
+    const lengthSection = changedLength
+        ? `\n\nThe feedback changes the length: the previous progressions had ${previousNumChords} chords, and all 3 new ones must have exactly ${numChords} chords.`
+        : `\n\nKeep all 3 progressions at exactly ${numChords} chords — unless the feedback explicitly asks for a different length, in which case use that length for all 3.`;
 
     let directionSection: string;
 
@@ -44,7 +51,7 @@ export function buildMultipleProgressionsMessage(
 
 This is a correction, not a new prompt. Keep serving the original request — "${prompt}" — but bend the harmony to satisfy this note. Every one of the 3 new progressions must clearly answer the feedback; vary *how* they answer it rather than whether they do.${standing}
 
-Treat the feedback as being about the music. If it names something you cannot express harmonically, express the closest harmonic equivalent.`.trim();
+Treat the feedback as being about the music. If it names something you cannot express harmonically, express the closest harmonic equivalent.${lengthSection}`.trim();
     } else {
         const standing = priorFeedback.length > 0
             ? `\n\nThe user's standing feedback from this session, oldest first: ${priorFeedback.map((f) => `"${f}"`).join(', ')}. Keep honouring it — most recent note wins where they conflict.`

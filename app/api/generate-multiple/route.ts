@@ -8,6 +8,7 @@ import { getUserRole } from '@/lib/premium';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multiple';
 import { GenerationRound, normalizeHistory, sanitizeFeedback } from '@/lib/prompts/history';
+import { clampChordCount, resolveChordCount } from '@/lib/prompts/chordCount';
 import { captureServer } from '@/lib/analytics/posthog-server';
 
 export const runtime = 'edge';
@@ -32,6 +33,34 @@ function historyFromBody(body: RequestBody): GenerationRound[] {
         return normalizeHistory([{ progressions: body.existingProgressions }]);
     }
     return [];
+}
+
+/**
+ * The length the client is actually looking at: the last round it got back,
+ * falling back to the requested count. Feedback like "make it 6 chords" is
+ * applied on top of this.
+ */
+function currentChordCount(history: GenerationRound[], requested: number): number {
+    const lastRound = [...history].reverse().find((round) => round.progressions.length > 0);
+    const lastLength = lastRound?.progressions[0]?.chords.length;
+    return lastLength ? clampChordCount(lastLength) : requested;
+}
+
+/** The length the model settled on — the most common across the returned progressions. */
+function resultChordCount(progressions: { chords: string[] }[], fallback: number): number {
+    const tally = new Map<number, number>();
+    for (const p of progressions) {
+        tally.set(p.chords.length, (tally.get(p.chords.length) ?? 0) + 1);
+    }
+    let best = fallback;
+    let bestCount = 0;
+    for (const [length, count] of tally) {
+        if (count > bestCount) {
+            best = length;
+            bestCount = count;
+        }
+    }
+    return best;
 }
 
 function todayDate(): string {
@@ -87,9 +116,15 @@ export async function POST(request: Request): Promise<Response> {
             }
         }
 
-        const count = (typeof numChords === 'number' && numChords >= 2 && numChords <= 8) ? numChords : 4;
-        const userMessage = buildMultipleProgressionsMessage(prompt, count, history, feedback);
-        const schema = createMultipleProgressionsSchema(count);
+        const requestedCount = (typeof numChords === 'number' && numChords >= 2 && numChords <= 8) ? numChords : 4;
+        // Feedback can ask for a different length ("make it 6 chords"). Honour
+        // it in the prompt, and let the schema accept any length in range for
+        // feedback rounds so a phrasing we didn't parse still generates instead
+        // of failing validation on every retry.
+        const previousCount = currentChordCount(history, requestedCount);
+        const count = feedback ? resolveChordCount(feedback, previousCount) : requestedCount;
+        const userMessage = buildMultipleProgressionsMessage(prompt, count, history, feedback, feedback ? previousCount : undefined);
+        const schema = createMultipleProgressionsSchema(count, { allowLengthChange: !!feedback });
         const modelId = premiumGranted ? PREMIUM_MODEL_ID : STANDARD_MODEL_ID;
 
         const result = await generateChordObject(userMessage, schema, 1.2, modelId);
@@ -100,13 +135,17 @@ export async function POST(request: Request): Promise<Response> {
             style: prog.style,
         }));
 
+        const finalCount = resultChordCount(progressionsWithIds, count);
+
         // Server-side truth for the funnel: fires even when client events are
         // blocked by adblock, and carries server-only context (model, role,
         // whether a premium slot was actually granted). distinct_id matches the
         // Clerk userId we identify on the client; anonymous users get a stable
         // guest bucket so the event still lands in the funnel.
         await captureServer('generation_succeeded', userId ?? 'anonymous', {
-            num_chords: count,
+            num_chords: finalCount,
+            requested_num_chords: requestedCount,
+            chord_count_changed: finalCount !== previousCount,
             model: modelId,
             premium_requested: !!premium,
             premium_granted: premiumGranted,
@@ -118,7 +157,10 @@ export async function POST(request: Request): Promise<Response> {
             progression_count: progressionsWithIds.length,
         });
 
-        return createResponse({ progressions: progressionsWithIds, premiumUsed: premiumGranted, unlimitedPremium });
+        // `numChords` tells the client which length this round actually landed
+        // on, so follow-up rounds and the chord-count selector stay in sync
+        // after feedback changed it.
+        return createResponse({ progressions: progressionsWithIds, numChords: finalCount, premiumUsed: premiumGranted, unlimitedPremium });
 
     } catch (err: unknown) {
         const e = err as ApiError;

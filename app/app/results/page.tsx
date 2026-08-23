@@ -116,6 +116,10 @@ function ResultsContent() {
 
             setRounds([{ id: `round-${Date.now()}`, progressions: data.progressions || [] }]);
 
+            if (typeof data.numChords === "number" && data.numChords >= 2 && data.numChords <= 8) {
+                setNumChords(data.numChords);
+            }
+
             if (usePremium) {
                 if (data.premiumUsed && !data.unlimitedPremium) {
                     consumePremium();
@@ -206,6 +210,13 @@ function ResultsContent() {
             }
 
             const newProgressions: ProgressionData[] = data.progressions || [];
+
+            // Feedback can change the length ("make it 6 chords"), so follow the
+            // count this round actually landed on — later rounds, the skeletons
+            // and the header selector all key off it.
+            if (typeof data.numChords === "number" && data.numChords >= 2 && data.numChords <= 8) {
+                setNumChords(data.numChords);
+            }
 
             setRounds((prev) => (
                 pendingRoundId
