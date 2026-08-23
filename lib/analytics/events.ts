@@ -18,6 +18,7 @@ export const AnalyticsEvent = {
     GenerationRequested: "generation_requested",
     GenerationFailed: "generation_failed",
     GenerateMoreClicked: "generate_more_clicked",
+    FeedbackSubmitted: "feedback_submitted",
 
     // Funnel: activation / value
     ProgressionPlayed: "progression_played",

@@ -3,16 +3,16 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { MidiNumbers } from "react-piano";
-import { Plus} from "lucide-react";
 import dynamic from "next/dynamic";
 import SearchHeader from "@/components/SearchHeader";
 import ChordColumnsContainer from "@/components/ChordColumns/ChordColumnsContainer";
+import GenerateMoreBar from "@/components/GenerateMoreBar";
+import FeedbackDivider from "@/components/FeedbackDivider";
 
 const PianoKeyboard = dynamic(() => import("@/components/PianoKeyboard"), { ssr: false });
 import { usePiano } from "@/components/PianoProvider";
 import ThinkingMessages from "@/components/ThinkingMessages";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
+import ProgressionSkeleton from "@/components/ChordColumns/ProgressionSkeleton";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
@@ -21,6 +21,18 @@ interface ProgressionData {
     id: string;
     chords: string[];
     style: string;
+}
+
+/**
+ * One batch of generated progressions, plus the feedback that produced it.
+ * Results are stored as an ordered list of rounds (rather than one flat list)
+ * so the UI can show where each note took effect, and so the API can be told
+ * exactly which chords came after which feedback.
+ */
+interface RoundData {
+    id: string;
+    feedback?: string;
+    progressions: ProgressionData[];
 }
 
 function ResultsContent() {
@@ -33,11 +45,14 @@ function ResultsContent() {
 
     const [prompt, setPrompt] = useState("");
     const [numChords, setNumChords] = useState(4);
-    const [progressions, setProgressions] = useState<ProgressionData[]>([]);
+    const [rounds, setRounds] = useState<RoundData[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [activeNotes, setActiveNotes] = useState<string[]>([]);
     const [hasInitialized, setHasInitialized] = useState(false);
+
+    const totalProgressions = rounds.reduce((sum, round) => sum + round.progressions.length, 0);
+    const hasFeedback = rounds.some((round) => !!round.feedback);
 
     // Load samples on mount
     useEffect(() => {
@@ -50,7 +65,7 @@ function ResultsContent() {
         if (!queryPrompt.trim()) return;
 
         setIsLoading(true);
-        setProgressions([]);
+        setRounds([]);
 
         capture(AnalyticsEvent.GenerationRequested, {
             num_chords: queryNumChords,
@@ -87,7 +102,7 @@ function ResultsContent() {
                 return;
             }
 
-            setProgressions(data.progressions || []);
+            setRounds([{ id: `round-${Date.now()}`, progressions: data.progressions || [] }]);
 
             if (usePremium) {
                 if (data.premiumUsed && !data.unlimitedPremium) {
@@ -131,21 +146,29 @@ function ResultsContent() {
         }
     }, [searchParams, hasInitialized, generateProgressions]);
 
-    const generateMoreProgressions = useCallback(async () => {
+    const generateMoreProgressions = useCallback(async (feedback?: string, pendingRoundId?: string) => {
         if (!prompt.trim() || isLoadingMore) return;
 
         setIsLoadingMore(true);
 
-        capture(AnalyticsEvent.GenerateMoreClicked, {
+        capture(feedback ? AnalyticsEvent.FeedbackSubmitted : AnalyticsEvent.GenerateMoreClicked, {
             num_chords: numChords,
-            existing_count: progressions.length,
+            existing_count: totalProgressions,
+            feedback_length: feedback?.length ?? 0,
+            feedback_round: rounds.filter((round) => !!round.feedback).length + (feedback ? 1 : 0),
         });
 
         try {
-            const existingProgressions = progressions.map((p) => ({
-                chords: p.chords,
-                style: p.style,
-            }));
+            // Send the full history in order so the model can see which chords
+            // it produced in response to which feedback. The pending round is
+            // excluded — its feedback travels in `feedback`, and it has no
+            // chords yet.
+            const historyRounds = rounds
+                .filter((round) => round.progressions.length > 0)
+                .map((round) => ({
+                    feedback: round.feedback,
+                    progressions: round.progressions.map((p) => ({ chords: p.chords, style: p.style })),
+                }));
 
             const res = await fetch("/api/generate-multiple", {
                 method: "POST",
@@ -153,7 +176,8 @@ function ResultsContent() {
                 body: JSON.stringify({
                     prompt,
                     numChords,
-                    existingProgressions,
+                    rounds: historyRounds,
+                    feedback,
                 }),
             });
 
@@ -161,17 +185,53 @@ function ResultsContent() {
 
             if (!res.ok || data.error) {
                 console.error("Generate more error:", data.error);
+                capture(AnalyticsEvent.GenerationFailed, {
+                    status: res.status,
+                    error: data.error ?? "unknown",
+                    is_generate_more: true,
+                    has_feedback: !!feedback,
+                });
+                // Roll the optimistic divider back — it promised results that
+                // never arrived.
+                if (pendingRoundId) {
+                    setRounds((prev) => prev.filter((round) => round.id !== pendingRoundId));
+                }
                 setIsLoadingMore(false);
                 return;
             }
 
-            setProgressions((prev) => [...prev, ...(data.progressions || [])]);
+            const newProgressions: ProgressionData[] = data.progressions || [];
+
+            setRounds((prev) => (
+                pendingRoundId
+                    ? prev.map((round) => (
+                        round.id === pendingRoundId ? { ...round, progressions: newProgressions } : round
+                    ))
+                    : [...prev, { id: `round-${Date.now()}`, progressions: newProgressions }]
+            ));
         } catch (err) {
             console.error("Network error:", err);
+            if (pendingRoundId) {
+                setRounds((prev) => prev.filter((round) => round.id !== pendingRoundId));
+            }
         }
 
         setIsLoadingMore(false);
-    }, [prompt, numChords, progressions, isLoadingMore]);
+    }, [prompt, numChords, rounds, totalProgressions, isLoadingMore]);
+
+    /**
+     * Places the feedback divider on screen in the same commit the composer
+     * closes, so the note morphs straight into it and the user sees what the
+     * pending progressions are answering while they load.
+     */
+    const handleSubmitFeedback = useCallback((feedback: string, layoutId: string) => {
+        // Mirror the guard in generateMoreProgressions so a rejected request
+        // can't leave an orphaned divider behind.
+        if (!prompt.trim() || isLoadingMore) return;
+
+        setRounds((prev) => [...prev, { id: layoutId, feedback, progressions: [] }]);
+        generateMoreProgressions(feedback, layoutId);
+    }, [prompt, isLoadingMore, generateMoreProgressions]);
 
     const handleGenerate = useCallback(() => {
         if (!prompt.trim()) return;
@@ -222,46 +282,53 @@ function ResultsContent() {
                         <div className="flex items-center justify-center py-8">
                             <ThinkingMessages />
                         </div>
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="w-full">
-                                <Skeleton className="h-[340px] w-full rounded-xl" />
-                            </div>
+                        {[0, 1, 2].map((i) => (
+                            <ProgressionSkeleton key={i} index={i} count={numChords} />
                         ))}
                     </div>
-                ) : progressions.length > 0 ? (
+                ) : totalProgressions > 0 ? (
                     <div className="space-y-6">
-                        {progressions.map((progression) => (
-                            <ChordColumnsContainer
-                                key={progression.id}
-                                id={progression.id}
-                                initialChords={progression.chords}
-                                style={progression.style}
-                                prompt={prompt}
-                                onActiveNotesChange={handleActiveNotesChange}
-                                isSaved={isSaved}
-                                onToggleSave={(saveId, chords) => toggleSave({ id: saveId, chords, style: progression.style, prompt })}
-                                isSignedIn={isSavedSignedIn}
-                            />
+                        {rounds.map((round) => (
+                            <React.Fragment key={round.id}>
+                                {round.feedback && (
+                                    <FeedbackDivider
+                                        feedback={round.feedback}
+                                        layoutId={round.id}
+                                        isPending={round.progressions.length === 0}
+                                    />
+                                )}
+                                {round.progressions.map((progression) => (
+                                    <ChordColumnsContainer
+                                        key={progression.id}
+                                        id={progression.id}
+                                        initialChords={progression.chords}
+                                        style={progression.style}
+                                        prompt={prompt}
+                                        onActiveNotesChange={handleActiveNotesChange}
+                                        isSaved={isSaved}
+                                        onToggleSave={(saveId, chords) => toggleSave({ id: saveId, chords, style: progression.style, prompt })}
+                                        isSignedIn={isSavedSignedIn}
+                                    />
+                                ))}
+                            </React.Fragment>
                         ))}
                         {isLoadingMore ? (
                             <>
-                                {[1, 2, 3].map((i) => (
-                                    <div key={`skeleton-more-${i}`} className="w-full">
-                                        <Skeleton className="h-[340px] w-full rounded-xl" />
-                                    </div>
+                                {[0, 1, 2].map((i) => (
+                                    <ProgressionSkeleton
+                                        key={`skeleton-more-${i}`}
+                                        index={i}
+                                        count={numChords}
+                                    />
                                 ))}
                             </>
                         ) : (
-                            <div className="flex justify-center pt-2">
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={generateMoreProgressions}
-                                    className="h-12 w-12 rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-muted-foreground/60 transition-colors"
-                                >
-                                    <Plus className="h-5 w-5 text-muted-foreground" />
-                                </Button>
-                            </div>
+                            <GenerateMoreBar
+                                onGenerateMore={() => generateMoreProgressions()}
+                                onSubmitFeedback={handleSubmitFeedback}
+                                disabled={isLoadingMore}
+                                hasFeedback={hasFeedback}
+                            />
                         )}
                     </div>
                 ) : (

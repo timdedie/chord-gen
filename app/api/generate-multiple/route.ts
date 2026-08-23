@@ -6,7 +6,7 @@ import { createMultipleProgressionsSchema } from '@/lib/schemas';
 import { generateChordObject, createResponse, STANDARD_MODEL_ID, PREMIUM_MODEL_ID, FREE_PREMIUM_GENERATIONS_PER_DAY, PRO_PREMIUM_GENERATIONS_PER_DAY } from '@/lib/ai';
 import { getUserRole } from '@/lib/premium';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multiple';
+import { buildMultipleProgressionsMessage, GenerationRound } from '@/lib/prompts/generate-multiple';
 import { captureServer } from '@/lib/analytics/posthog-server';
 
 export const runtime = 'edge';
@@ -15,8 +15,48 @@ export const maxDuration = 25;
 interface RequestBody {
     prompt: string;
     numChords: number;
+    /** Chronological generation history, so the model sees which chords followed which feedback. */
+    rounds?: GenerationRound[];
+    /** Feedback the user gave on everything generated so far, driving this round. */
+    feedback?: string;
+    /** Legacy flat form of `rounds`, kept so older clients keep working. */
     existingProgressions?: { chords: string[]; style: string }[];
     premium?: boolean;
+}
+
+const MAX_FEEDBACK_LENGTH = 300;
+/** History is only context — cap it so a long session can't blow up the prompt. */
+const MAX_HISTORY_ROUNDS = 8;
+const MAX_PROGRESSIONS_PER_ROUND = 6;
+
+function sanitizeFeedback(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim().slice(0, MAX_FEEDBACK_LENGTH);
+    return trimmed || undefined;
+}
+
+/** Normalizes whatever the client sent (new `rounds`, or legacy `existingProgressions`) into ordered rounds. */
+function normalizeHistory(body: RequestBody): GenerationRound[] {
+    const raw: GenerationRound[] = Array.isArray(body.rounds)
+        ? body.rounds
+        : Array.isArray(body.existingProgressions) && body.existingProgressions.length > 0
+            ? [{ progressions: body.existingProgressions }]
+            : [];
+
+    return raw
+        .filter((round) => round && Array.isArray(round.progressions))
+        .slice(-MAX_HISTORY_ROUNDS)
+        .map((round) => ({
+            feedback: sanitizeFeedback(round.feedback),
+            progressions: round.progressions
+                .filter((p) => p && Array.isArray(p.chords) && p.chords.length > 0)
+                .slice(0, MAX_PROGRESSIONS_PER_ROUND)
+                .map((p) => ({
+                    chords: p.chords.map(String),
+                    style: typeof p.style === 'string' ? p.style : '',
+                })),
+        }))
+        .filter((round) => round.progressions.length > 0);
 }
 
 function todayDate(): string {
@@ -53,7 +93,9 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         const body = (await request.json()) as RequestBody;
-        const { prompt, numChords, existingProgressions, premium } = body;
+        const { prompt, numChords, premium } = body;
+        const history = normalizeHistory(body);
+        const feedback = sanitizeFeedback(body.feedback);
 
         if (!prompt) {
             return createResponse({ error: 'Prompt is required.' }, 400);
@@ -71,7 +113,7 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         const count = (typeof numChords === 'number' && numChords >= 2 && numChords <= 8) ? numChords : 4;
-        const userMessage = buildMultipleProgressionsMessage(prompt, count, existingProgressions);
+        const userMessage = buildMultipleProgressionsMessage(prompt, count, history, feedback);
         const schema = createMultipleProgressionsSchema(count);
         const modelId = premiumGranted ? PREMIUM_MODEL_ID : STANDARD_MODEL_ID;
 
@@ -94,7 +136,10 @@ export async function POST(request: Request): Promise<Response> {
             premium_requested: !!premium,
             premium_granted: premiumGranted,
             role,
-            is_generate_more: Array.isArray(existingProgressions) && existingProgressions.length > 0,
+            is_generate_more: history.length > 0,
+            has_feedback: !!feedback,
+            feedback_length: feedback?.length ?? 0,
+            feedback_rounds: history.filter((r) => !!r.feedback).length + (feedback ? 1 : 0),
             progression_count: progressionsWithIds.length,
         });
 

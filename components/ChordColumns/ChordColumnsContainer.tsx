@@ -16,7 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { ChordItem } from "@/hooks/useChordManagement";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ColumnsSkeleton } from "./ProgressionSkeleton";
 import { Chord } from "tonal";
 import { now as toneNow } from "tone";
 import { usePiano } from "@/components/PianoProvider";
@@ -526,9 +526,7 @@ export default function ChordColumnsContainer({
       />
 
       {isCurrentIterationLoading ? (
-        <div className="p-4" style={{ height: "50vh", minHeight: 300 }}>
-          <Skeleton className="h-full w-full rounded-lg" />
-        </div>
+        <ColumnsSkeleton count={chords.length || 4} />
       ) : hasChords && (
         <DndContext
           sensors={sensors}

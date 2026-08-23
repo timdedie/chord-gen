@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { motion } from "framer-motion";
-import { X, GripVertical } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, GripHorizontal } from "lucide-react";
 import ColumnChordInfo from "./ColumnChordInfo";
 import { ChordColor } from "@/lib/chordColors";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,21 @@ export default function ChordColumn({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  // Controls sit on top of a saturated colour, so they are tinted from the
+  // column's own text colour rather than the app's neutral tokens.
+  const onDarkFill = color.text === "hsl(0, 0%, 100%)";
+  const chipStyle = {
+    color: color.text,
+    "--chip-bg": onDarkFill ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.07)",
+    "--chip-bg-hover": onDarkFill ? "rgba(255,255,255,0.26)" : "rgba(0,0,0,0.14)",
+    "--chip-ring": onDarkFill ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.16)",
+  } as React.CSSProperties;
+
+  const chipClass =
+    "bg-[var(--chip-bg)] hover:bg-[var(--chip-bg-hover)] ring-1 ring-inset ring-[var(--chip-ring)] backdrop-blur-md transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2";
+
+  const controlsVisible = hover && !isDragging;
 
   if (loading || !chord) {
     return (
@@ -90,37 +105,57 @@ export default function ChordColumn({
         />
 
         {/* Hover overlay with controls */}
-        <div
-          className={cn(
-            "absolute inset-0 transition-opacity duration-200 z-10",
-            hover ? "opacity-100" : "opacity-0"
-          )}
-        >
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            className="absolute top-3 right-3 p-1.5 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-colors cursor-pointer"
-            style={{ color: color.text }}
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Remove</span>
-          </button>
+        <AnimatePresence>
+          {controlsVisible && (
+            <div className="absolute inset-0 z-10 pointer-events-none">
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, scale: 0.6 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.6 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30, mass: 0.5 }}
+                whileTap={{ scale: 0.88 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                style={chipStyle}
+                className={cn(
+                  "absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full cursor-pointer pointer-events-auto",
+                  chipClass
+                )}
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+                <span className="sr-only">Remove chord</span>
+              </motion.button>
 
-          {/* Drag handle - only this element triggers drag */}
-          <div
-            {...attributes}
-            {...listeners}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full bg-black/10 cursor-grab active:cursor-grabbing touch-none"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GripVertical
-              className="h-5 w-5"
-              style={{ color: color.text, opacity: 0.7 }}
-            />
-          </div>
-        </div>
+              {/* Drag handle - only this element triggers drag */}
+              <motion.div
+                {...attributes}
+                {...listeners}
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 500,
+                  damping: 30,
+                  mass: 0.5,
+                  delay: 0.03,
+                }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ ...chipStyle, x: "-50%", y: "-50%" }}
+                className={cn(
+                  "absolute top-1/2 left-1/2 flex h-7 w-10 items-center justify-center rounded-full cursor-grab active:cursor-grabbing touch-none pointer-events-auto",
+                  chipClass
+                )}
+              >
+                <GripHorizontal className="h-4 w-4" />
+                <span className="sr-only">Drag to reorder</span>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Chord info anchored to bottom */}
         <div className="absolute bottom-0 left-0 right-0 pb-6 flex justify-center">
