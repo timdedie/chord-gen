@@ -6,7 +6,8 @@ import { createMultipleProgressionsSchema } from '@/lib/schemas';
 import { generateChordObject, createResponse, STANDARD_MODEL_ID, PREMIUM_MODEL_ID, FREE_PREMIUM_GENERATIONS_PER_DAY, PRO_PREMIUM_GENERATIONS_PER_DAY } from '@/lib/ai';
 import { getUserRole } from '@/lib/premium';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { buildMultipleProgressionsMessage, GenerationRound } from '@/lib/prompts/generate-multiple';
+import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multiple';
+import { GenerationRound, normalizeHistory, sanitizeFeedback } from '@/lib/prompts/history';
 import { captureServer } from '@/lib/analytics/posthog-server';
 
 export const runtime = 'edge';
@@ -24,39 +25,13 @@ interface RequestBody {
     premium?: boolean;
 }
 
-const MAX_FEEDBACK_LENGTH = 300;
-/** History is only context — cap it so a long session can't blow up the prompt. */
-const MAX_HISTORY_ROUNDS = 8;
-const MAX_PROGRESSIONS_PER_ROUND = 6;
-
-function sanitizeFeedback(value: unknown): string | undefined {
-    if (typeof value !== 'string') return undefined;
-    const trimmed = value.trim().slice(0, MAX_FEEDBACK_LENGTH);
-    return trimmed || undefined;
-}
-
 /** Normalizes whatever the client sent (new `rounds`, or legacy `existingProgressions`) into ordered rounds. */
-function normalizeHistory(body: RequestBody): GenerationRound[] {
-    const raw: GenerationRound[] = Array.isArray(body.rounds)
-        ? body.rounds
-        : Array.isArray(body.existingProgressions) && body.existingProgressions.length > 0
-            ? [{ progressions: body.existingProgressions }]
-            : [];
-
-    return raw
-        .filter((round) => round && Array.isArray(round.progressions))
-        .slice(-MAX_HISTORY_ROUNDS)
-        .map((round) => ({
-            feedback: sanitizeFeedback(round.feedback),
-            progressions: round.progressions
-                .filter((p) => p && Array.isArray(p.chords) && p.chords.length > 0)
-                .slice(0, MAX_PROGRESSIONS_PER_ROUND)
-                .map((p) => ({
-                    chords: p.chords.map(String),
-                    style: typeof p.style === 'string' ? p.style : '',
-                })),
-        }))
-        .filter((round) => round.progressions.length > 0);
+function historyFromBody(body: RequestBody): GenerationRound[] {
+    if (Array.isArray(body.rounds)) return normalizeHistory(body.rounds);
+    if (Array.isArray(body.existingProgressions) && body.existingProgressions.length > 0) {
+        return normalizeHistory([{ progressions: body.existingProgressions }]);
+    }
+    return [];
 }
 
 function todayDate(): string {
@@ -94,7 +69,7 @@ export async function POST(request: Request): Promise<Response> {
 
         const body = (await request.json()) as RequestBody;
         const { prompt, numChords, premium } = body;
-        const history = normalizeHistory(body);
+        const history = historyFromBody(body);
         const feedback = sanitizeFeedback(body.feedback);
 
         if (!prompt) {

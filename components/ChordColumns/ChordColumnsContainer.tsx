@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
   DndContext,
@@ -16,6 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { ChordItem } from "@/hooks/useChordManagement";
+import type { GenerationRound } from "@/lib/prompts/history";
 import { ColumnsSkeleton } from "./ProgressionSkeleton";
 import { Chord } from "tonal";
 import { now as toneNow } from "tone";
@@ -42,6 +43,12 @@ interface ChordColumnsContainerProps {
   isSaved?: (id: string) => boolean;
   onToggleSave?: (id: string, chords: string[]) => void;
   isSignedIn?: boolean;
+  /**
+   * Everything generated in this session so far, with the feedback that drove
+   * each round. Passed along when inserting a chord so the new chord answers
+   * the same notes the rest of the progression does.
+   */
+  history?: GenerationRound[];
 }
 
 export default function ChordColumnsContainer({
@@ -54,6 +61,7 @@ export default function ChordColumnsContainer({
   isSaved,
   onToggleSave,
   isSignedIn = false,
+  history,
 }: ChordColumnsContainerProps) {
   const { resolvedTheme } = useTheme();
   const isDarkMode = resolvedTheme === "dark";
@@ -65,6 +73,11 @@ export default function ChordColumnsContainer({
     })),
   ]);
   const [currentIteration, setCurrentIteration] = useState(0);
+  /**
+   * The note that produced each iteration, index-aligned with `iterations`.
+   * Iteration 0 came straight from the generator, so it has none.
+   */
+  const [iterationFeedback, setIterationFeedback] = useState<(string | undefined)[]>([undefined]);
   const [loadingIterationIndex, setLoadingIterationIndex] = useState<number | null>(null);
 
   const chords = iterations[currentIteration] ?? EMPTY_CHORDS;
@@ -258,6 +271,28 @@ export default function ChordColumnsContainer({
     setChords((prev) => prev.filter((c) => c.id !== chordId));
   }, [setChords]);
 
+  /**
+   * Session history plus this card's own edit trail: each edit iteration
+   * becomes a round of its own ("after the user said X, you produced these
+   * chords"), so an inserted chord sees the same cumulative feedback the
+   * progression around it was generated from. Iterations *after* the one on
+   * screen are left out — their notes don't apply to what the user is looking
+   * at.
+   */
+  const requestRounds = useMemo<GenerationRound[]>(() => {
+    const editRounds = iterations
+      .slice(1, currentIteration + 1)
+      .map((chordItems, i) => ({
+        feedback: iterationFeedback[i + 1],
+        progressions: [
+          { chords: chordItems.map((c) => c.chord).filter(Boolean), style },
+        ],
+      }))
+      .filter((round) => round.progressions[0].chords.length > 0);
+
+    return [...(history ?? []), ...editRounds];
+  }, [history, iterations, iterationFeedback, currentIteration, style]);
+
   const addChordAt = useCallback(
     async (position: number) => {
       if (chords.length >= 8) return;
@@ -286,6 +321,7 @@ export default function ChordColumnsContainer({
             existingChords: existingChordsForApi,
             addChordPosition: position,
             prompt: prompt || "add one suitable chord here",
+            rounds: requestRounds,
           }),
         });
 
@@ -325,7 +361,7 @@ export default function ChordColumnsContainer({
       }
       setLoadingChordId(null);
     },
-    [chords, prompt, setChords]
+    [chords, prompt, requestRounds, setChords]
   );
 
   // --- Explanation ---
@@ -437,6 +473,7 @@ export default function ChordColumnsContainer({
     setEditFeedback("");
     setIsEditPopoverOpen(false);
     setIterations((prev) => [...prev, []]);
+    setIterationFeedback((prev) => [...prev, feedbackText]);
     setLoadingIterationIndex(newIterationIndex);
     setCurrentIteration(newIterationIndex);
 
@@ -456,6 +493,7 @@ export default function ChordColumnsContainer({
       if (!res.ok || data.error || !Array.isArray(data.chords)) {
         console.error("Edit progression API error:", data.error);
         setIterations((prev) => prev.slice(0, newIterationIndex));
+        setIterationFeedback((prev) => prev.slice(0, newIterationIndex));
         setCurrentIteration(newIterationIndex - 1);
         return;
       }
@@ -475,6 +513,7 @@ export default function ChordColumnsContainer({
     } catch (e) {
       console.error("Error editing progression:", e);
       setIterations((prev) => prev.slice(0, newIterationIndex));
+      setIterationFeedback((prev) => prev.slice(0, newIterationIndex));
       setCurrentIteration(newIterationIndex - 1);
     } finally {
       setLoadingIterationIndex(null);

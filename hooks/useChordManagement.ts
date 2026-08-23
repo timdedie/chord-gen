@@ -21,10 +21,6 @@ interface GenerationParams {
     customPrompt?: string;
 }
 
-interface AddChordContextParams {
-    prompt?: string;
-}
-
 // Added: Define types for the expected API response
 interface ApiChordProgressionResponse {
     chords: string[];
@@ -32,18 +28,10 @@ interface ApiChordProgressionResponse {
     details?: any; // To capture potential error details from API
 }
 
-interface ApiSingleChordResponse {
-    chord: string;
-    error?: string;
-    details?: any; // To capture potential error details from API
-}
-
-
 export function useChordManagement(props?: UseChordManagementProps) {
     const [prompt, setPrompt] = useState<string>(props?.initialPrompt || "");
     const [chords, setChords] = useState<ChordItem[]>(props?.initialChords || []);
     const [fullLoading, setFullLoading] = useState<boolean>(false);
-    const [loadingChordId, setLoadingChordId] = useState<string | null>(null);
 
     const showErrorToast = useCallback((title: string, description?: string) => {
         toast.error(title, {
@@ -193,84 +181,6 @@ export function useChordManagement(props?: UseChordManagementProps) {
     }, [prompt, chords, generateChordsInternal, setChords, showErrorToast]);
 
 
-    const addChordAt = useCallback(
-        async (position: number, contextParams?: AddChordContextParams) => {
-            if (chords.length >= 8) {
-                showErrorToast("Limit Reached", "Maximum of 8 chords allowed.");
-                return;
-            }
-            const newChordId = generateUniqueId();
-            const placeholderChord: ChordItem = { id: newChordId, chord: "" };
-
-            const originalChords = [...chords];
-            const updatedChordsWithPlaceholder = [
-                ...originalChords.slice(0, position),
-                placeholderChord,
-                ...originalChords.slice(position),
-            ];
-            setChords(updatedChordsWithPlaceholder);
-            setLoadingChordId(newChordId);
-
-            try {
-                const existingChordsForApi = originalChords.map(c => ({ chord: c.chord }));
-
-                const requestBody: any = {
-                    existingChords: existingChordsForApi,
-                    addChordPosition: position,
-                    prompt: contextParams?.prompt || prompt || "add one suitable chord here",
-                };
-
-                const res = await fetch("/api/generate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(requestBody),
-                });
-
-                const data: ApiSingleChordResponse = await res.json();
-
-                if (!res.ok || data.error) {
-                    const errorMsg = data.error || "Failed to add chord from server.";
-                    let errorDetails = "";
-                    if (data.details) {
-                        errorDetails = typeof data.details === 'object' ? JSON.stringify(data.details) : String(data.details);
-                    }
-                    console.error("Add Chord API Error:", errorMsg, data.details);
-                    showErrorToast("Add Chord Failed", `${errorMsg}${errorDetails ? ` Details: ${errorDetails}` : ''}`);
-                    setChords(originalChords);
-                    setLoadingChordId(null);
-                    return;
-                }
-
-                // Data from API is already transformed by Zod, so direct trim is sufficient here.
-                // The .replace(/△/g, "") is removed.
-                const cleanedReceivedChordSymbol = data.chord?.trim(); // API should provide cleaned string via Zod
-                const chordData = cleanedReceivedChordSymbol ? Chord.get(cleanedReceivedChordSymbol) : null;
-
-                // Updated validation: ensure symbol, name, and notes are present
-                if (!cleanedReceivedChordSymbol || !chordData || !chordData.symbol || !chordData.name || !chordData.notes || chordData.notes.length === 0) {
-                    showErrorToast("Invalid Chord", `Received an invalid chord ("${cleanedReceivedChordSymbol || 'empty'}") from the server.`);
-                    setChords(originalChords);
-                    setLoadingChordId(null);
-                    return;
-                }
-
-                const updatedChordItem: ChordItem = {
-                    id: newChordId,
-                    chord: chordData.symbol!, // Use .symbol instead of .name, ! is safe due to validation
-                };
-                setChords((prev) =>
-                    prev.map((ch) => (ch.id === newChordId ? updatedChordItem : ch))
-                );
-            } catch (e: any) {
-                console.error("Error adding chord (catch block):", e);
-                showErrorToast("Network Error", e.message || "Error adding chord. Please try again.");
-                setChords(originalChords);
-            }
-            setLoadingChordId(null);
-        },
-        [chords, prompt, showErrorToast, setChords]
-    );
-
     const handleDragEnd = useCallback(
         ({ active, over }: DragEndEvent) => {
             if (!over || active.id === over.id) return;
@@ -302,9 +212,7 @@ export function useChordManagement(props?: UseChordManagementProps) {
         prompt, setPrompt,
         chords, setChords,
         fullLoading,
-        loadingChordId,
         generateChords,
-        addChordAt,
         handleDragEnd,
         generateChordsFromExample,
     };

@@ -1,44 +1,21 @@
-export interface ProgressionSummary {
-    chords: string[];
-    style: string;
-}
+import {
+    type GenerationRound,
+    type ProgressionSummary,
+    collectFeedback,
+    formatRounds,
+} from './history';
 
-/**
- * One generation round: the progressions that were produced, and the feedback
- * the user gave *before* that round (absent for the initial round and for a
- * plain "generate more" click). Rounds are kept in chronological order so the
- * model can see how the user's taste evolved across the session.
- */
-export interface GenerationRound {
-    feedback?: string;
-    progressions: ProgressionSummary[];
-}
-
-function formatProgressions(progressions: ProgressionSummary[]): string {
-    return progressions
-        .map((p, i) => `  ${i + 1}. [${p.style}] ${p.chords.join(' → ')}`)
-        .join('\n');
-}
+export type { GenerationRound, ProgressionSummary };
 
 function buildHistorySection(history: GenerationRound[]): string {
-    const rounds = history
-        .filter((round) => round.progressions.length > 0)
-        .map((round, i) => {
-            const header = round.feedback
-                ? `Round ${i + 1} — after the user said: "${round.feedback}"`
-                : i === 0
-                    ? `Round ${i + 1} — from the original request:`
-                    : `Round ${i + 1} — the user asked for more, no feedback given:`;
-            return `${header}\n${formatProgressions(round.progressions)}`;
-        });
-
-    if (rounds.length === 0) return '';
+    const rounds = formatRounds(history);
+    if (!rounds) return '';
 
     return `
 
 ## What you already gave the user (oldest first)
 
-${rounds.join('\n\n')}
+${rounds}
 
 Never repeat or closely resemble any progression above — the user has already seen them.`;
 }
@@ -51,9 +28,7 @@ export function buildMultipleProgressionsMessage(
 ): string {
     const historySection = history && history.length > 0 ? buildHistorySection(history) : '';
 
-    const priorFeedback = (history ?? [])
-        .map((round) => round.feedback)
-        .filter((f): f is string => !!f);
+    const priorFeedback = collectFeedback(history ?? []);
 
     let directionSection: string;
 

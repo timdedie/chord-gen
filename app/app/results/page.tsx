@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { MidiNumbers } from "react-piano";
 import dynamic from "next/dynamic";
@@ -52,6 +52,18 @@ function ResultsContent() {
     const [hasInitialized, setHasInitialized] = useState(false);
 
     const totalProgressions = rounds.reduce((sum, round) => sum + round.progressions.length, 0);
+
+    /**
+     * The session so far, in the shape the API takes: which progressions were
+     * produced, and the note that produced each batch. Sent with "generate
+     * more" and with single-chord inserts alike, so both answer the same notes.
+     */
+    const historyRounds = useMemo(() => rounds
+        .filter((round) => round.progressions.length > 0)
+        .map((round) => ({
+            feedback: round.feedback,
+            progressions: round.progressions.map((p) => ({ chords: p.chords, style: p.style })),
+        })), [rounds]);
     const hasFeedback = rounds.some((round) => !!round.feedback);
 
     // Load samples on mount
@@ -159,17 +171,10 @@ function ResultsContent() {
         });
 
         try {
-            // Send the full history in order so the model can see which chords
+            // The full history goes in order so the model can see which chords
             // it produced in response to which feedback. The pending round is
-            // excluded — its feedback travels in `feedback`, and it has no
-            // chords yet.
-            const historyRounds = rounds
-                .filter((round) => round.progressions.length > 0)
-                .map((round) => ({
-                    feedback: round.feedback,
-                    progressions: round.progressions.map((p) => ({ chords: p.chords, style: p.style })),
-                }));
-
+            // already excluded — it has no chords yet, and its feedback travels
+            // in `feedback`.
             const res = await fetch("/api/generate-multiple", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -217,7 +222,7 @@ function ResultsContent() {
         }
 
         setIsLoadingMore(false);
-    }, [prompt, numChords, rounds, totalProgressions, isLoadingMore]);
+    }, [prompt, numChords, rounds, historyRounds, totalProgressions, isLoadingMore]);
 
     /**
      * Places the feedback divider on screen in the same commit the composer
@@ -304,6 +309,7 @@ function ResultsContent() {
                                         initialChords={progression.chords}
                                         style={progression.style}
                                         prompt={prompt}
+                                        history={historyRounds}
                                         onActiveNotesChange={handleActiveNotesChange}
                                         isSaved={isSaved}
                                         onToggleSave={(saveId, chords) => toggleSave({ id: saveId, chords, style: progression.style, prompt })}

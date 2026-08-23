@@ -9,12 +9,19 @@ import { generateChordObject, createResponse } from '@/lib/ai';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { getUserRole } from '@/lib/premium';
 import { buildProgressionMessage, buildAddChordMessage, SimpleChordObject } from '@/lib/prompts/generate';
+import { GenerationRound, normalizeHistory } from '@/lib/prompts/history';
 
 interface RequestBody {
     prompt?: string;
     existingChords?: SimpleChordObject[];
     addChordPosition?: number;
     numChords?: number;
+    /**
+     * Chronological session history — the progressions the user has been shown
+     * and the feedback they gave. Only used when inserting a chord, so the new
+     * chord answers the same notes the surrounding progression did.
+     */
+    rounds?: GenerationRound[];
 }
 
 interface ApiError extends Error {
@@ -35,7 +42,8 @@ export async function POST(request: Request): Promise<Response> {
         const { prompt, existingChords = [], addChordPosition, numChords } = body;
 
         if (typeof addChordPosition === 'number') {
-            const userMessage = buildAddChordMessage(prompt, existingChords, addChordPosition);
+            const history = normalizeHistory(body.rounds);
+            const userMessage = buildAddChordMessage(prompt, existingChords, addChordPosition, history);
             const result = await generateChordObject(userMessage, SingleChordSchema);
             return createResponse(result);
         }
