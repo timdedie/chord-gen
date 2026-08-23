@@ -65,8 +65,12 @@ export function AppSidebar() {
 
     return (
         <aside
-            onClick={() => {
-                if (collapsed) setCollapsed(false);
+            onClick={(e) => {
+                if (!collapsed) return;
+                // Don't expand when the click landed on an interactive control —
+                // those should just do their own thing.
+                if ((e.target as HTMLElement).closest('a, button, [role="button"], input, select')) return;
+                setCollapsed(false);
             }}
             className={`hidden md:flex flex-col fixed top-0 left-0 h-screen bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 transition-all duration-200 z-40 ${
                 collapsed ? 'w-14 cursor-pointer' : 'w-56'
