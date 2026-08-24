@@ -63,6 +63,34 @@ export const EditProgressionSchema = z.object({
         .describe("The revised chord progression, incorporating the user's requested changes."),
 });
 
+/**
+ * Alternatives offered when the user asks to replace one chord in a
+ * progression. Built per-request so the schema itself can reject a "swap" that
+ * just hands back the chord already sitting in that slot.
+ */
+export const createAlternativeChordsSchema = (originalChord: string) => {
+    const normalize = (c: string) => c.trim().toLowerCase();
+    const original = normalize(originalChord);
+
+    return z.object({
+        alternatives: z.array(z.object({
+            chord: ValidChordStringSchema.describe("A substitute chord symbol (e.g. Am7, F/A)"),
+            label: z.string()
+                .describe("A 1-2 word description of the character this swap brings (e.g. 'Brighter', 'Jazzier', 'More tension')"),
+        }))
+            .length(3)
+            .describe('3 distinct alternatives for the chord being replaced.')
+            .refine(
+                (alts) => alts.every((a) => normalize(a.chord) !== original),
+                { message: `Each alternative must differ from the original chord (${originalChord}).` },
+            )
+            .refine(
+                (alts) => new Set(alts.map((a) => normalize(a.chord))).size === alts.length,
+                { message: 'The three alternatives must all be different from each other.' },
+            ),
+    });
+};
+
 export const SingleChordSchema = z.object({
     chord: ValidChordStringSchema.describe("A single chord symbol (e.g. F#m7)"),
 });
@@ -72,3 +100,4 @@ export const SingleChordSchema = z.object({
  */
 export type ValidChordString = z.infer<typeof ValidChordStringSchema>;
 export type SingleChord = z.infer<typeof SingleChordSchema>;
+export type AlternativeChord = z.infer<ReturnType<typeof createAlternativeChordsSchema>>['alternatives'][number];

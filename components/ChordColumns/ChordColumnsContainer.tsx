@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   DndContext,
   closestCenter,
@@ -25,6 +25,7 @@ import { getVoicedChordNotes } from "@/lib/chordUtils";
 import { generateChordColors } from "@/lib/chordColors";
 import { useTheme } from "next-themes";
 import ChordColumn from "./ChordColumn";
+import type { ChordAlternative } from "./ChordAlternatives";
 import ColumnSpacer from "./ColumnSpacer";
 import ColumnToolbar from "./ColumnToolbar";
 
@@ -102,6 +103,17 @@ export default function ChordColumnsContainer({
   const [loadingChordId, setLoadingChordId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingChordId, setPlayingChordId] = useState<string | null>(null);
+
+  /**
+   * Replace-a-chord state. Only one column can be open at a time — comparing
+   * four options is already the busiest the strip gets. `replaceOptions` stays
+   * null while the model is still answering, which is what draws the
+   * placeholder bands.
+   */
+  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+  const [replaceOptions, setReplaceOptions] = useState<ChordAlternative[] | null>(null);
+  /** Bumped on every request and on cancel, so a late response is discarded. */
+  const replaceRequestRef = useRef(0);
 
   // Explanation state
   const [isExplanationPopoverOpen, setIsExplanationPopoverOpen] =
@@ -267,9 +279,20 @@ export default function ChordColumnsContainer({
 
   // --- Add / Remove ---
 
+  /**
+   * Closes the replace panel and invalidates any request still in flight, so a
+   * slow answer can't reopen a panel the user already dismissed.
+   */
+  const cancelReplace = useCallback(() => {
+    replaceRequestRef.current += 1;
+    setReplaceTargetId(null);
+    setReplaceOptions(null);
+  }, []);
+
   const handleRemoveChord = useCallback((chordId: string) => {
+    if (chordId === replaceTargetId) cancelReplace();
     setChords((prev) => prev.filter((c) => c.id !== chordId));
-  }, [setChords]);
+  }, [setChords, replaceTargetId, cancelReplace]);
 
   /**
    * Session history plus this card's own edit trail: each edit iteration
@@ -362,6 +385,63 @@ export default function ChordColumnsContainer({
       setLoadingChordId(null);
     },
     [chords, prompt, requestRounds, setChords]
+  );
+
+  // --- Replace a chord ---
+
+  const handleRequestReplace = useCallback(
+    async (chordId: string) => {
+      const index = chords.findIndex((c) => c.id === chordId);
+      if (index === -1 || !chords[index].chord) return;
+
+      const requestId = replaceRequestRef.current + 1;
+      replaceRequestRef.current = requestId;
+      setReplaceTargetId(chordId);
+      setReplaceOptions(null);
+
+      try {
+        const res = await fetch("/api/replace-chord", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chords: chords.map((c) => c.chord),
+            index,
+            prompt,
+            rounds: requestRounds,
+          }),
+        });
+
+        const data = await res.json();
+        // The user cancelled, or asked about a different chord, while we waited.
+        if (replaceRequestRef.current !== requestId) return;
+
+        if (!res.ok || data.error || !Array.isArray(data.alternatives)) {
+          console.error("Replace chord API error:", data.error);
+          setReplaceTargetId(null);
+          return;
+        }
+
+        setReplaceOptions(
+          data.alternatives
+            .filter((a: ChordAlternative) => a && typeof a.chord === "string")
+            .slice(0, 3)
+        );
+      } catch (e) {
+        console.error("Error fetching chord alternatives:", e);
+        if (replaceRequestRef.current === requestId) setReplaceTargetId(null);
+      }
+    },
+    [chords, prompt, requestRounds]
+  );
+
+  const handleChooseAlternative = useCallback(
+    (chordId: string, chord: string) => {
+      cancelReplace();
+      setChords((prev) =>
+        prev.map((c) => (c.id === chordId ? { ...c, chord } : c))
+      );
+    },
+    [cancelReplace, setChords]
   );
 
   // --- Explanation ---
@@ -469,6 +549,7 @@ export default function ChordColumnsContainer({
     const chordsForApi = chords.map((c) => c.chord);
     const newIterationIndex = iterations.length;
 
+    cancelReplace();
     setIsEditSubmitting(true);
     setEditFeedback("");
     setIsEditPopoverOpen(false);
@@ -519,25 +600,29 @@ export default function ChordColumnsContainer({
       setLoadingIterationIndex(null);
       setIsEditSubmitting(false);
     }
-  }, [editFeedback, isEditSubmitting, chords, iterations.length, prompt, id]);
+  }, [editFeedback, isEditSubmitting, chords, iterations.length, prompt, id, cancelReplace]);
 
   const onEditPopoverOpenChange = useCallback((open: boolean) => {
     setIsEditPopoverOpen(open);
   }, []);
 
+  // A different iteration is a different progression, so any open replace
+  // panel belongs to what was on screen a moment ago, not to what's there now.
   const goToPreviousIteration = useCallback(() => {
+    cancelReplace();
     setCurrentIteration((i) => Math.max(0, i - 1));
-  }, []);
+  }, [cancelReplace]);
 
   const goToNextIteration = useCallback(() => {
+    cancelReplace();
     setCurrentIteration((i) => Math.min(iterations.length - 1, i + 1));
-  }, [iterations.length]);
+  }, [iterations.length, cancelReplace]);
 
   const hasChords = chords.length > 0;
   const isCurrentIterationLoading = loadingIterationIndex === currentIteration;
 
   return (
-    <div className="w-full rounded-xl overflow-hidden border border-border/50 bg-card/50">
+    <div className="w-full rounded-3xl overflow-hidden border border-border/50 bg-card/50">
       <ColumnToolbar
         style={style}
         chords={chords.map((c) => c.chord)}
@@ -564,59 +649,97 @@ export default function ChordColumnsContainer({
         isEditSubmitting={isEditSubmitting}
       />
 
-      {isCurrentIterationLoading ? (
-        <ColumnsSkeleton count={chords.length || 4} />
-      ) : hasChords && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={chords.map((c) => c.id)}
-            strategy={horizontalListSortingStrategy}
-          >
-            <div
-              className="flex w-full overflow-x-auto md:overflow-x-hidden snap-x snap-mandatory md:snap-none"
-              style={{ height: "50vh", minHeight: 300 }}
-            >
-              <AnimatePresence mode="popLayout">
-                {chords.flatMap((chord, index) => [
-                  <ColumnSpacer
-                    key={`spacer-${index}`}
-                    position={index}
-                    chordsCount={chords.length}
-                    addChordAt={addChordAt}
-                  />,
-                  <ChordColumn
-                    key={chord.id}
-                    id={chord.id}
-                    chord={chord.chord}
-                    color={
-                      colors[index] || {
-                        bg: "hsl(220, 60%, 70%)",
-                        text: "white",
-                        hue: 220,
-                        saturation: 60,
-                        lightness: 70,
-                      }
-                    }
-                    isPlaying={playingChordId === chord.id}
-                    loading={loadingChordId === chord.id}
-                    onPlay={() => playChordOnce(chord.chord, chord.id)}
-                    onRemove={() => handleRemoveChord(chord.id)}
-                  />,
-                ])}
-                <ColumnSpacer
-                  key="spacer-trailing"
-                  position={chords.length}
-                  chordsCount={chords.length}
-                  addChordAt={addChordAt}
+      {/* Skeleton and strip are stacked and cross-faded rather than swapped, so
+          sending an edit dissolves into the placeholder and back out again.
+          Keying on the iteration means stepping between versions dissolves too,
+          instead of collapsing every column to nothing and regrowing it. */}
+      {(isCurrentIterationLoading || hasChords) && (
+        <div className="relative" style={{ height: "50vh", minHeight: 300 }}>
+          <AnimatePresence initial={false}>
+            {isCurrentIterationLoading ? (
+              <motion.div
+                key="loading"
+                className="absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+              >
+                <ColumnsSkeleton
+                  count={chords.length || 4}
+                  style={{ height: "100%", minHeight: 0 }}
                 />
-              </AnimatePresence>
-            </div>
-          </SortableContext>
-        </DndContext>
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`iteration-${currentIteration}`}
+                className="absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+              >
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={chords.map((c) => c.id)}
+                    strategy={horizontalListSortingStrategy}
+                  >
+                    <div className="flex h-full w-full overflow-x-auto md:overflow-x-hidden snap-x snap-mandatory md:snap-none">
+                      <AnimatePresence mode="popLayout">
+                        {chords.flatMap((chord, index) => [
+                          <ColumnSpacer
+                            key={`spacer-${index}`}
+                            position={index}
+                            chordsCount={chords.length}
+                            addChordAt={addChordAt}
+                          />,
+                          <ChordColumn
+                            key={chord.id}
+                            id={chord.id}
+                            chord={chord.chord}
+                            color={
+                              colors[index] || {
+                                bg: "hsl(220, 60%, 70%)",
+                                text: "white",
+                                hue: 220,
+                                saturation: 60,
+                                lightness: 70,
+                              }
+                            }
+                            playingId={playingChordId}
+                            loading={loadingChordId === chord.id}
+                            isDarkMode={isDarkMode}
+                            isReplacing={replaceTargetId === chord.id}
+                            alternatives={
+                              replaceTargetId === chord.id ? replaceOptions : null
+                            }
+                            onPlay={playChordOnce}
+                            onRemove={() => handleRemoveChord(chord.id)}
+                            onRequestReplace={() => handleRequestReplace(chord.id)}
+                            onCancelReplace={cancelReplace}
+                            onChooseAlternative={(alt) =>
+                              handleChooseAlternative(chord.id, alt)
+                            }
+                          />,
+                        ])}
+                        <ColumnSpacer
+                          key="spacer-trailing"
+                          position={chords.length}
+                          chordsCount={chords.length}
+                          addChordAt={addChordAt}
+                        />
+                      </AnimatePresence>
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
     </div>
   );

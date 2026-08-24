@@ -93,9 +93,12 @@ export default function GenerateMoreBar({
                     >
                         <motion.div
                             layoutId={`${composerId}-shell`}
-                            style={{ borderRadius: 16 }}
+                            // Inline, not a Tailwind class: framer-motion interpolates
+                            // this into the divider pill's 9999 during the morph.
+                            // 24 == rounded-3xl, matching PromptBar.
+                            style={{ borderRadius: 24 }}
                             transition={MORPH}
-                            className="flex items-center gap-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-black p-2 pl-3.5 shadow-lg"
+                            className="flex items-center gap-2 border border-gray-200 bg-white p-2 pl-4 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.30)] dark:border-gray-800 dark:bg-black dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.85)]"
                         >
                             <motion.div
                                 layoutId={`${composerId}-icon`}
@@ -125,7 +128,7 @@ export default function GenerateMoreBar({
                                 variant="ghost"
                                 size="icon"
                                 onClick={close}
-                                className="h-11 w-11 flex-shrink-0 rounded-xl text-muted-foreground"
+                                className="h-11 w-11 flex-shrink-0 rounded-full text-muted-foreground"
                                 aria-label="Cancel feedback"
                             >
                                 <X className="h-4 w-4" />
@@ -133,7 +136,7 @@ export default function GenerateMoreBar({
                             <Button
                                 onClick={submit}
                                 disabled={disabled || !feedback.trim()}
-                                className="h-11 w-11 flex-shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                                className="h-11 w-11 flex-shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
                                 aria-label="Generate with this feedback"
                             >
                                 <ArrowRight className="h-5 w-5" strokeWidth={3} />

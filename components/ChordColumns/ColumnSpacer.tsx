@@ -24,6 +24,12 @@ export default function ColumnSpacer({
   // real control in the space that opens up.
   const isRevealed = (hover || focused) && canAdd;
 
+  // The first and last slots sit against the card's rounded edge rather than
+  // between two columns, so there is no seam to show there — a resting width
+  // would just read as a sliver of card peeking out beside the colour. They
+  // still expand on hover, so adding a chord at either end is unchanged.
+  const isEdge = position === 0 || position === chordsCount;
+
   // Hover lives on the container, so it covers both the pad and the button
   // itself — the button is a sibling of the pad, not a child of it.
   return (
@@ -31,7 +37,8 @@ export default function ColumnSpacer({
       className={cn(
         // Gap only opens on desktop, where the button exists at all.
         // Stacks above the columns so the hit pad below can overhang them.
-        "relative z-30 w-1 flex-shrink-0 h-full flex items-center justify-center transition-[width] duration-200 ease-out",
+        "relative z-30 flex-shrink-0 h-full flex items-center justify-center transition-[width] duration-200 ease-out",
+        isEdge ? "w-0" : "w-1",
         isRevealed && "md:w-12"
       )}
       onMouseEnter={() => setHover(true)}

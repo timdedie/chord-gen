@@ -101,7 +101,7 @@ export default function ProgressionSkeleton({
 
   return (
     <motion.div
-      className="w-full rounded-xl overflow-hidden border border-border/50 bg-card/50"
+      className="w-full rounded-3xl overflow-hidden border border-border/50 bg-card/50"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}

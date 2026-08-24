@@ -22,8 +22,7 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
-import { MotionSection, MotionItem } from '@/components/motion-wrapper';
-import HeroDemo from '@/components/landing/HeroDemo';
+import HeroGenerator from '@/components/landing/HeroGenerator';
 import ChordShowcase from '@/components/landing/ChordShowcase';
 import { faqs } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -137,53 +136,42 @@ export default function LandingPage() {
     return (
         <div className="bg-gray-50 dark:bg-black overflow-hidden">
             {/* Hero */}
-            <section className="relative px-4 pt-20 pb-20 sm:pt-28 sm:pb-24">
+            <section className="relative px-4 pt-24 pb-16 sm:pt-32 sm:pb-20">
                 <div aria-hidden className="absolute inset-0 -z-10 overflow-hidden">
-                    <div className="absolute inset-0 [background-image:radial-gradient(circle,rgba(125,125,125,0.16)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_70%_55%_at_50%_30%,black,transparent)]" />
+                    <div className="absolute inset-0 [background-image:radial-gradient(circle,rgba(125,125,125,0.10)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_35%,black,transparent)]" />
                 </div>
 
                 <div className="mx-auto max-w-5xl text-center">
-                    <h1 className="animate-fade-in-up-delay-1 mb-6 text-5xl font-black leading-[0.95] tracking-tight text-gray-900 dark:text-white sm:text-6xl md:text-7xl lg:text-8xl">
-                        Chords from
-                        <br />
-                        words.
+                    <h1 className="mb-4 text-3xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                        AI Chord Progression Generator
                     </h1>
 
-                    <p className="animate-fade-in-up-delay-2 mx-auto mb-9 max-w-2xl text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl md:text-2xl">
-                        Describe a feeling. Hear it on a piano. Drag the MIDI
-                        straight into your DAW.
+                    <p className="mx-auto mb-10 text-base text-gray-500 dark:text-gray-400 sm:text-lg">
+                        What should it sound like?
                     </p>
 
-                    <div className="animate-fade-in-up-delay-3 mb-16 flex flex-col items-center justify-center gap-5 sm:flex-row">
-                        <Button asChild size="lg" className="rounded-2xl px-8 py-7 text-lg font-bold shadow-lg shadow-gray-900/20 transition-shadow hover:shadow-xl dark:shadow-white/10">
-                            <Link href="/app">
-                                Start creating
-                                <ArrowRight className="ml-2 h-5 w-5" />
-                            </Link>
-                        </Button>
-                        <Link
-                            href="#how-it-works"
-                            className="text-sm font-semibold text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline dark:text-gray-400 dark:hover:text-white"
-                        >
-                            See how it works
-                        </Link>
-                    </div>
+                    <HeroGenerator />
 
-                    <HeroDemo />
+                    <Link
+                        href="#how-it-works"
+                        className="mt-10 inline-block text-sm text-gray-500 underline-offset-4 transition-colors hover:text-gray-900 hover:underline dark:text-gray-400 dark:hover:text-white"
+                    >
+                        See how it works
+                    </Link>
                 </div>
             </section>
 
             {/* The output — real progression cards */}
-            <section className="px-4 py-24 sm:py-32">
-                <MotionSection variant="stagger" className="mx-auto max-w-5xl">
-                    <MotionItem className="mx-auto mb-16 max-w-3xl text-center">
-                        <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl md:text-6xl">
+            <section className="px-4 pt-8 pb-24 sm:pt-12 sm:pb-32">
+                <div className="mx-auto max-w-5xl">
+                    <div className="mx-auto mb-16 max-w-3xl text-center">
+                        <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                             Every prompt becomes
                             <br className="hidden sm:block" /> a progression you can play.
                         </h2>
-                    </MotionItem>
+                    </div>
 
-                    <MotionItem className="space-y-10">
+                    <div className="space-y-10">
                         <ChordShowcase
                             prompt="warm nostalgic neo-soul"
                             title="Velvet Hours"
@@ -194,26 +182,26 @@ export default function LandingPage() {
                             title="Classic Minor Cadence"
                             chords={['Am7', 'Dm7', 'E7b9', 'Am7']}
                         />
-                    </MotionItem>
-                </MotionSection>
+                    </div>
+                </div>
             </section>
 
             {/* Features — bento grid */}
             <section className="bg-white px-4 py-24 dark:bg-gray-950 sm:py-32">
-                <MotionSection variant="stagger" className="mx-auto max-w-6xl">
-                    <MotionItem className="mb-14 max-w-3xl">
-                        <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl md:text-6xl">
+                <div className="mx-auto max-w-6xl">
+                    <div className="mb-14 max-w-3xl">
+                        <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                             Everything you need,
                             <br className="hidden sm:block" /> nothing you don&apos;t.
                         </h2>
                         <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
                             From inspiration to production-ready MIDI in seconds.
                         </p>
-                    </MotionItem>
+                    </div>
 
                     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
                         {/* Type it, don't pick it */}
-                        <MotionItem variant="scaleIn" className="lg:col-span-2">
+                        <div className="lg:col-span-2">
                             <div className="group h-full rounded-3xl border border-gray-200 bg-gray-50 p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:p-10">
                                 <Music className="mb-6 h-7 w-7 text-gray-900 dark:text-white" />
                                 <h3 className="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
@@ -235,10 +223,10 @@ export default function LandingPage() {
                                     ))}
                                 </div>
                             </div>
-                        </MotionItem>
+                        </div>
 
                         {/* Visual piano */}
-                        <MotionItem variant="scaleIn">
+                        <div>
                             <div className="group flex h-full flex-col rounded-3xl border border-gray-200 bg-gray-50 p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:p-10">
                                 <Piano className="mb-6 h-7 w-7 text-gray-900 dark:text-white" />
                                 <h3 className="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
@@ -274,10 +262,10 @@ export default function LandingPage() {
                                     ))}
                                 </div>
                             </div>
-                        </MotionItem>
+                        </div>
 
                         {/* Full control */}
-                        <MotionItem variant="scaleIn">
+                        <div>
                             <div className="group flex h-full flex-col rounded-3xl border border-gray-200 bg-gray-50 p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:p-10">
                                 <Edit3 className="mb-6 h-7 w-7 text-gray-900 dark:text-white" />
                                 <h3 className="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
@@ -304,10 +292,10 @@ export default function LandingPage() {
                                     ))}
                                 </div>
                             </div>
-                        </MotionItem>
+                        </div>
 
                         {/* Free MIDI */}
-                        <MotionItem variant="scaleIn" className="lg:col-span-2">
+                        <div className="lg:col-span-2">
                             <div className="group h-full rounded-3xl border border-gray-200 bg-gray-50 p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:p-10">
                                 <Download className="mb-6 h-7 w-7 text-gray-900 dark:text-white" />
                                 <h3 className="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
@@ -333,93 +321,93 @@ export default function LandingPage() {
                                     ))}
                                 </div>
                             </div>
-                        </MotionItem>
+                        </div>
                     </div>
-                </MotionSection>
+                </div>
             </section>
 
             {/* How it works — editorial */}
             <section id="how-it-works" className="px-4 py-24 sm:py-32">
-                <MotionSection variant="stagger" className="mx-auto max-w-5xl">
-                    <MotionItem className="mb-12 max-w-3xl">
-                        <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl md:text-6xl">
+                <div className="mx-auto max-w-5xl">
+                    <div className="mb-12 max-w-3xl">
+                        <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                             From feeling to
                             <br className="hidden sm:block" /> finished MIDI.
                         </h2>
-                    </MotionItem>
+                    </div>
 
                     <div>
                         {steps.map((step, index) => (
-                            <MotionItem key={index}>
-                                <div
-                                    id={`step-${index + 1}`}
-                                    className="grid grid-cols-1 items-baseline gap-x-10 gap-y-3 border-t border-gray-200 py-10 dark:border-gray-800 sm:grid-cols-[5rem_1fr] sm:py-12"
-                                >
-                                    <span className="text-5xl font-black leading-none tabular-nums text-gray-200 dark:text-gray-800 sm:text-6xl">
-                                        {step.number}
-                                    </span>
-                                    <div className="max-w-xl">
-                                        <h3 className="text-3xl font-black tracking-tight text-gray-900 dark:text-white sm:text-4xl">
-                                            {step.title}
-                                        </h3>
-                                        <p className="mt-3 text-lg leading-relaxed text-gray-600 dark:text-gray-400">
-                                            {step.description}
-                                        </p>
-                                    </div>
+                            <div
+                                key={step.number}
+                                id={`step-${index + 1}`}
+                                className="grid grid-cols-1 items-baseline gap-x-10 gap-y-3 border-t border-gray-200 py-10 dark:border-gray-800 sm:grid-cols-[5rem_1fr] sm:py-12"
+                            >
+                                <span className="text-5xl font-black leading-none tabular-nums text-gray-200 dark:text-gray-800 sm:text-6xl">
+                                    {step.number}
+                                </span>
+                                <div className="max-w-xl">
+                                    <h3 className="text-3xl font-black tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                                        {step.title}
+                                    </h3>
+                                    <p className="mt-3 text-lg leading-relaxed text-gray-600 dark:text-gray-400">
+                                        {step.description}
+                                    </p>
                                 </div>
-                            </MotionItem>
+                            </div>
                         ))}
                     </div>
-                </MotionSection>
+                </div>
             </section>
 
             {/* Use cases — editorial list */}
             <section className="bg-white px-4 py-24 dark:bg-gray-950 sm:py-32">
-                <MotionSection variant="stagger" className="mx-auto max-w-5xl">
-                    <MotionItem className="mb-14 max-w-3xl">
-                        <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl md:text-6xl">
+                <div className="mx-auto max-w-5xl">
+                    <div className="mb-14 max-w-3xl">
+                        <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                             Built for every musician.
                         </h2>
                         <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
                             From your very first song to your hundredth film score.
                         </p>
-                    </MotionItem>
+                    </div>
 
                     <div className="grid grid-cols-1 gap-x-16 sm:grid-cols-2">
-                        {useCases.map((useCase, index) => (
-                            <MotionItem key={index}>
-                                <div className="flex gap-5 border-b border-gray-200 py-8 dark:border-gray-800">
-                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
-                                        <useCase.Icon className="h-6 w-6 text-gray-900 dark:text-white" />
-                                    </div>
-                                    <div>
-                                        <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">
-                                            {useCase.title}
-                                        </h3>
-                                        <p className="leading-relaxed text-gray-600 dark:text-gray-400">
-                                            {useCase.description}
-                                        </p>
-                                    </div>
+                        {useCases.map((useCase) => (
+                            <div
+                                key={useCase.title}
+                                className="flex gap-5 border-b border-gray-200 py-8 dark:border-gray-800"
+                            >
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+                                    <useCase.Icon className="h-6 w-6 text-gray-900 dark:text-white" />
                                 </div>
-                            </MotionItem>
+                                <div>
+                                    <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">
+                                        {useCase.title}
+                                    </h3>
+                                    <p className="leading-relaxed text-gray-600 dark:text-gray-400">
+                                        {useCase.description}
+                                    </p>
+                                </div>
+                            </div>
                         ))}
                     </div>
-                </MotionSection>
+                </div>
             </section>
 
             {/* Browse by genre / key */}
             <section className="px-4 py-24 sm:py-32">
-                <MotionSection variant="stagger" className="mx-auto max-w-5xl">
-                    <MotionItem className="mb-12 max-w-3xl">
+                <div className="mx-auto max-w-5xl">
+                    <div className="mb-12 max-w-3xl">
                         <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                             Browse by genre or key.
                         </h2>
                         <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
                             Reference guides for every common style and tonality.
                         </p>
-                    </MotionItem>
+                    </div>
 
-                    <MotionItem>
+                    <div>
                         <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                             <div className="rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
                                 <h3 className="mb-5 text-xl font-bold text-gray-900 dark:text-white">
@@ -467,29 +455,29 @@ export default function LandingPage() {
                                 </Link>
                             </div>
                         </div>
-                    </MotionItem>
+                    </div>
 
-                    <MotionItem className="mt-10 text-center">
+                    <div className="mt-10 text-center">
                         <p className="text-sm text-gray-500 dark:text-gray-500">
                             Coming from another chord tool?{' '}
                             <Link href="/chordchord-alternative" className="font-bold text-gray-900 hover:underline dark:text-white">
                                 See how ChordGen compares as a free ChordChord alternative
                             </Link>
                         </p>
-                    </MotionItem>
-                </MotionSection>
+                    </div>
+                </div>
             </section>
 
             {/* FAQ */}
             <section className="bg-white px-4 py-24 dark:bg-gray-950 sm:py-32">
-                <MotionSection variant="stagger" className="mx-auto max-w-3xl">
-                    <MotionItem className="mb-14">
-                        <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl md:text-6xl">
+                <div className="mx-auto max-w-3xl">
+                    <div className="mb-14">
+                        <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                             Questions, answered.
                         </h2>
-                    </MotionItem>
+                    </div>
 
-                    <MotionItem>
+                    <div>
                         <Accordion type="single" collapsible className="w-full">
                             {faqs.map((faq, index) => (
                                 <AccordionItem
@@ -506,16 +494,16 @@ export default function LandingPage() {
                                 </AccordionItem>
                             ))}
                         </Accordion>
-                    </MotionItem>
-                </MotionSection>
+                    </div>
+                </div>
             </section>
 
             {/* Final CTA */}
             <section className="px-4 py-24 sm:py-32">
-                <MotionSection variant="fadeInUp" className="mx-auto max-w-4xl">
+                <div className="mx-auto max-w-4xl">
                     <div className="relative overflow-hidden rounded-[2.5rem] bg-gray-950 px-8 pt-16 pb-44 text-center dark:border dark:border-gray-800 sm:px-16 sm:pt-24 sm:pb-52">
                         <div className="relative">
-                            <h2 className="mb-6 text-4xl font-black leading-tight text-white sm:text-5xl md:text-6xl">
+                            <h2 className="mb-6 text-4xl font-black leading-tight text-white sm:text-5xl">
                                 Ready when you are.
                             </h2>
                             <p className="mx-auto mb-10 max-w-xl text-lg text-gray-400 sm:text-xl">
@@ -550,7 +538,7 @@ export default function LandingPage() {
                             })}
                         </div>
                     </div>
-                </MotionSection>
+                </div>
             </section>
 
             <Script

@@ -10,7 +10,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
     const core: MetadataRoute.Sitemap = [
         { url: baseUrl, lastModified, changeFrequency: 'monthly', priority: 1.0 },
-        { url: `${baseUrl}/app`, lastModified, changeFrequency: 'monthly', priority: 0.9 },
+        // /app is intentionally absent: it is noindexed in favour of "/", which
+        // is now the canonical generator entry point.
         { url: `${baseUrl}/blog`, lastModified, changeFrequency: 'monthly', priority: 0.8 },
         { url: `${baseUrl}/chords`, lastModified, changeFrequency: 'monthly', priority: 0.8 },
         { url: `${baseUrl}/chordchord-alternative`, lastModified, changeFrequency: 'monthly', priority: 0.7 },
