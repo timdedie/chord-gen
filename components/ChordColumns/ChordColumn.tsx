@@ -72,6 +72,13 @@ export default function ChordColumn({
   const chipClass =
     "bg-[var(--chip-bg)] hover:bg-[var(--chip-bg-hover)] ring-1 ring-inset ring-[var(--chip-ring)] backdrop-blur-md transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2";
 
+  // One glass surface for the whole bar; the segments inside stay transparent
+  // until hovered, so edit and remove read as one control, not two.
+  const barClass =
+    "bg-[var(--chip-bg)] ring-1 ring-inset ring-[var(--chip-ring)] backdrop-blur-md";
+  const segmentClass =
+    "flex h-7 w-7 items-center justify-center rounded-full cursor-pointer transition-colors duration-200 hover:bg-[var(--chip-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--chip-ring)]";
+
   const isPlaceholder = loading || !chord;
   const controlsVisible = hover && !isDragging && !isReplacing && !isPlaceholder;
   const isPlaying = playingId === id;
@@ -147,53 +154,45 @@ export default function ChordColumn({
         <AnimatePresence>
           {controlsVisible && (
             <div className="absolute inset-0 z-10 pointer-events-none">
-              <motion.button
-                type="button"
+              <motion.div
                 initial={{ opacity: 0, scale: 0.6 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.6 }}
                 transition={{ type: "spring", stiffness: 500, damping: 30, mass: 0.5 }}
-                whileTap={{ scale: 0.88 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
                 style={chipStyle}
                 className={cn(
-                  "absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full cursor-pointer pointer-events-auto",
-                  chipClass
+                  "absolute top-3 right-3 flex items-center rounded-full pointer-events-auto",
+                  barClass
                 )}
               >
-                <X className="h-3.5 w-3.5" strokeWidth={2.25} />
-                <span className="sr-only">Remove chord</span>
-              </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.88 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestReplace();
+                  }}
+                  className={segmentClass}
+                >
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
+                  <span className="sr-only">Swap this chord for an alternative</span>
+                </motion.button>
 
-              <motion.button
-                type="button"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.6 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 500,
-                  damping: 30,
-                  mass: 0.5,
-                  delay: 0.03,
-                }}
-                whileTap={{ scale: 0.88 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRequestReplace();
-                }}
-                style={chipStyle}
-                className={cn(
-                  "absolute top-3 right-12 flex h-7 w-7 items-center justify-center rounded-full cursor-pointer pointer-events-auto",
-                  chipClass
-                )}
-              >
-                <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
-                <span className="sr-only">Swap this chord for an alternative</span>
-              </motion.button>
+                <span aria-hidden className="h-4 w-px bg-[var(--chip-ring)]" />
+
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.88 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                  }}
+                  className={segmentClass}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+                  <span className="sr-only">Remove chord</span>
+                </motion.button>
+              </motion.div>
 
               {/* Drag handle - only this element triggers drag */}
               <motion.div
