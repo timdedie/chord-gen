@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, GripHorizontal, ArrowLeftRight } from "lucide-react";
+import { X, GripHorizontal, Pencil } from "lucide-react";
 import ColumnChordInfo from "./ColumnChordInfo";
 import ChordAlternatives, { ChordAlternative } from "./ChordAlternatives";
 import { ChordColor } from "@/lib/chordColors";
@@ -191,7 +191,7 @@ export default function ChordColumn({
                   chipClass
                 )}
               >
-                <ArrowLeftRight className="h-3.5 w-3.5" strokeWidth={2.25} />
+                <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
                 <span className="sr-only">Swap this chord for an alternative</span>
               </motion.button>
 
