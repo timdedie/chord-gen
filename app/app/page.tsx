@@ -66,7 +66,7 @@ export default function AppPage() {
                         </div>
 
                         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-gray-900 dark:text-white">
-                            What do you want to create?
+                            What should it sound like?
                         </h1>
                     </div>
 
