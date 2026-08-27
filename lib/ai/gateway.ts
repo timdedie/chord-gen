@@ -1,3 +1,6 @@
+// DeepSeek doesn't support native JSON schema; SDK falls back to system message injection — expected.
+(globalThis as Record<string, unknown>).AI_SDK_LOG_WARNINGS = false;
+
 import { generateObject, type ModelMessage } from "ai";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
