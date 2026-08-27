@@ -37,7 +37,7 @@ const useCases = [
     {
         Icon: Mic2,
         title: 'Songwriters',
-        description: 'Stuck on a song? Describe the feeling you\'re going for and get a harmonic starting point in seconds. No music theory needed.',
+        description: 'Stuck on a song? Describe the feeling you\'re after and get something to start from. No theory needed.',
     },
     {
         Icon: Headphones,
@@ -47,20 +47,20 @@ const useCases = [
     {
         Icon: Piano,
         title: 'Instrumentalists',
-        description: 'Explore new harmonic territory for jazz, classical, or contemporary playing, and use the interactive piano to see exactly how each chord is built.',
+        description: 'Find chords you wouldn\'t have reached for on your own, and see exactly how each one is built on the piano.',
     },
     {
         Icon: BookOpen,
         title: 'Music students',
-        description: 'See how real progressions come together across genres, from blues turnarounds to neo-soul extensions to film-score cues.',
+        description: 'See how progressions actually work across genres: blues turnarounds, neo-soul extensions, film-score cues.',
     },
 ];
 
 const steps = [
-    { number: '01', title: 'Describe', description: 'Enter a prompt like "melancholic jazz" or "upbeat pop anthem".' },
-    { number: '02', title: 'Generate', description: 'Our AI writes multiple unique progressions tailored to your vision.' },
-    { number: '03', title: 'Refine', description: 'Edit, rearrange, and perfect your progression with intuitive controls.' },
-    { number: '04', title: 'Export', description: 'Download as MIDI and drop it straight into your DAW.' },
+    { number: '01', title: 'Describe', description: 'Type something like "melancholic jazz" or "upbeat pop anthem".' },
+    { number: '02', title: 'Generate', description: 'You get three progressions back, each with a different take on it.' },
+    { number: '03', title: 'Refine', description: 'Swap chords, reorder them, cut the ones that don\'t work.' },
+    { number: '04', title: 'Export', description: 'Download the MIDI and drop it into your DAW.' },
 ];
 
 const genres: [string, string][] = [
@@ -166,8 +166,8 @@ export default function LandingPage() {
                 <div className="mx-auto max-w-5xl">
                     <div className="mx-auto mb-16 max-w-3xl text-center">
                         <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                            Every prompt becomes
-                            <br className="hidden sm:block" /> a progression you can play.
+                            This is what
+                            <br className="hidden sm:block" /> you get back.
                         </h2>
                     </div>
 
@@ -191,11 +191,10 @@ export default function LandingPage() {
                 <div className="mx-auto max-w-6xl">
                     <div className="mb-14 max-w-3xl">
                         <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                            Everything you need,
-                            <br className="hidden sm:block" /> nothing you don&apos;t.
+                            What it does.
                         </h2>
                         <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
-                            From inspiration to production-ready MIDI in seconds.
+                            Type a prompt, hear the chords, export the MIDI.
                         </p>
                     </div>
 
@@ -208,9 +207,9 @@ export default function LandingPage() {
                                     Type it, don&apos;t pick it
                                 </h3>
                                 <p className="mb-8 max-w-md leading-relaxed text-gray-600 dark:text-gray-400">
-                                    No scale pickers or preset menus. Type a mood or genre in
-                                    plain words and get a progression built around it, not just
-                                    filtered from it.
+                                    No scale pickers, no preset menus. Say what you want in
+                                    plain words and the chords get written around that, not
+                                    filtered out of a list.
                                 </p>
                                 <div className="flex flex-wrap gap-2" aria-hidden>
                                     {['late-night drive', 'rainy day jazz', 'euphoric festival drop', 'bittersweet goodbye'].map((p) => (
@@ -233,8 +232,8 @@ export default function LandingPage() {
                                     Visual piano
                                 </h3>
                                 <p className="mb-8 leading-relaxed text-gray-600 dark:text-gray-400">
-                                    See and hear every chord on an interactive keyboard as you
-                                    build your progression.
+                                    Every chord shows up on a keyboard you can hear and play
+                                    as you go.
                                 </p>
                                 <div className="relative mt-auto h-16" aria-hidden>
                                     <div className="flex h-full gap-[3px]">
@@ -269,11 +268,11 @@ export default function LandingPage() {
                             <div className="group flex h-full flex-col rounded-3xl border border-gray-200 bg-gray-50 p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:p-10">
                                 <Edit3 className="mb-6 h-7 w-7 text-gray-900 dark:text-white" />
                                 <h3 className="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
-                                    Full control
+                                    Change anything
                                 </h3>
                                 <p className="mb-8 leading-relaxed text-gray-600 dark:text-gray-400">
-                                    Drag, drop, add, or remove chords. Fine-tune until it sounds
-                                    exactly right.
+                                    Drag chords around, swap one out, add or delete. Keep going
+                                    until it sounds right.
                                 </p>
                                 <div className="mt-auto flex items-center gap-2" aria-hidden>
                                     {['Am7', 'Dm9', 'G13'].map((c, i) => (
@@ -302,8 +301,8 @@ export default function LandingPage() {
                                     Free MIDI, any DAW
                                 </h3>
                                 <p className="mb-8 max-w-md leading-relaxed text-gray-600 dark:text-gray-400">
-                                    Export standard MIDI files, completely free, no strings
-                                    attached. Drop them straight into your session.
+                                    Plain .mid files, free, no account. Drag one into your
+                                    session and keep working.
                                 </p>
                                 <div className="flex flex-wrap items-center gap-3" aria-hidden>
                                     <span className="font-mono-accent inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white">
@@ -331,8 +330,8 @@ export default function LandingPage() {
                 <div className="mx-auto max-w-5xl">
                     <div className="mb-12 max-w-3xl">
                         <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                            From feeling to
-                            <br className="hidden sm:block" /> finished MIDI.
+                            How it
+                            <br className="hidden sm:block" /> works.
                         </h2>
                     </div>
 
@@ -365,10 +364,10 @@ export default function LandingPage() {
                 <div className="mx-auto max-w-5xl">
                     <div className="mb-14 max-w-3xl">
                         <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                            Built for every musician.
+                            Who it&apos;s for.
                         </h2>
                         <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
-                            From your very first song to your hundredth film score.
+                            Songwriters, producers, players, and students.
                         </p>
                     </div>
 
@@ -403,7 +402,7 @@ export default function LandingPage() {
                             Browse by genre or key.
                         </h2>
                         <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
-                            Reference guides for every common style and tonality.
+                            Chord references for common styles and keys.
                         </p>
                     </div>
 
@@ -473,7 +472,7 @@ export default function LandingPage() {
                 <div className="mx-auto max-w-3xl">
                     <div className="mb-14">
                         <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                            Questions, answered.
+                            Questions.
                         </h2>
                     </div>
 
@@ -504,10 +503,10 @@ export default function LandingPage() {
                     <div className="relative overflow-hidden rounded-[2.5rem] bg-gray-950 px-8 pt-16 pb-44 text-center dark:border dark:border-gray-800 sm:px-16 sm:pt-24 sm:pb-52">
                         <div className="relative">
                             <h2 className="mb-6 text-4xl font-black leading-tight text-white sm:text-5xl">
-                                Ready when you are.
+                                Your turn.
                             </h2>
                             <p className="mx-auto mb-10 max-w-xl text-lg text-gray-400 sm:text-xl">
-                                Your next chord progression is one sentence away.
+                                One line is all it takes to get started.
                             </p>
                             <Button
                                 asChild
