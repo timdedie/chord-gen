@@ -1,25 +1,30 @@
 import { z } from 'zod';
-import { Chord } from 'tonal';
 import { MAX_CHORDS, MIN_CHORDS } from './prompts/chordCount';
+import { repairChordSymbol } from './ai/repair';
 
 /**
- * Validates a chord symbol string.
- * Cleans common AI artifacts (quotes, trailing punctuation), then validates with tonal.js.
+ * Validates a chord symbol, repairing it first.
+ *
+ * `repairChordSymbol` fixes the near-miss spellings models actually produce —
+ * `C△7`, `Am(maj7)`, `B♭maj7`, `Cmaj7add9` — and canonicalises valid ones so
+ * the same chord never appears three ways in one progression. This used to be
+ * an ad-hoc trim-and-strip inline here, and everything it could not handle cost
+ * a full regeneration round trip. Only genuinely unrecognisable symbols now
+ * reach the model again.
  */
 export const ValidChordStringSchema = z.string()
     .describe("A chord symbol (e.g. F#m7, Cmaj7/E, Bbm)")
-    .transform(s => {
-        let cleaned = s.trim();
-        if ((cleaned.startsWith("'") && cleaned.endsWith("'")) || (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
-            cleaned = cleaned.substring(1, cleaned.length - 1).trim();
+    .transform((raw, ctx) => {
+        const repaired = repairChordSymbol(raw);
+        if (!repaired) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `"${raw}" is not a recognizable chord symbol.`,
+            });
+            return z.NEVER;
         }
-        return cleaned.replace(/[.,;:!?]$/, "").trim();
-    })
-    .refine(s => {
-        if (!s) return false;
-        const chord = Chord.get(s);
-        return chord && !chord.empty;
-    }, { message: "Invalid or unrecognized chord symbol." });
+        return repaired;
+    });
 
 /**
  * Schema factories — enforce exact chord count at the schema level.

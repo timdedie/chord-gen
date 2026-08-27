@@ -1,15 +1,12 @@
-export const maxDuration = 60;
+export const maxDuration = 30;
 
-import {
-    createProgressionSchema,
-    SingleChordSchema,
-} from '@/lib/schemas';
-import { auth } from '@clerk/nextjs/server';
-import { generateChordObject, createResponse } from '@/lib/ai';
-import { checkRateLimit } from '@/lib/rateLimit';
-import { getUserRole } from '@/lib/premium';
+import { createProgressionSchema, SingleChordSchema } from '@/lib/schemas';
+import { aiRoute, AiRouteError, generateStructured } from '@/lib/ai/gateway';
+import { CHORD_GENERATION_SYSTEM_PROMPT } from '@/lib/prompts/system';
 import { buildProgressionMessage, buildAddChordMessage, SimpleChordObject } from '@/lib/prompts/generate';
 import { GenerationRound, normalizeHistory } from '@/lib/prompts/history';
+import { cacheKey, readCache, writeCache } from '@/lib/ai/cache';
+import { clampChordCount } from '@/lib/prompts/chordCount';
 
 interface RequestBody {
     prompt?: string;
@@ -24,46 +21,38 @@ interface RequestBody {
     rounds?: GenerationRound[];
 }
 
-interface ApiError extends Error {
-    status?: number;
-    details?: unknown;
-}
+export const POST = aiRoute<RequestBody>('generate', async ({ body }) => {
+    const { prompt, existingChords = [], addChordPosition, numChords } = body;
 
-export async function POST(request: Request): Promise<Response> {
-    try {
-        const { userId } = await auth();
-        const role = await getUserRole(userId);
-
-        if (role !== 'admin' && !(await checkRateLimit(request))) {
-            return createResponse({ error: 'Too many requests. Please try again tomorrow.' }, 429);
-        }
-
-        const body = (await request.json()) as RequestBody;
-        const { prompt, existingChords = [], addChordPosition, numChords } = body;
-
-        if (typeof addChordPosition === 'number') {
-            const history = normalizeHistory(body.rounds);
-            const userMessage = buildAddChordMessage(prompt, existingChords, addChordPosition, history);
-            const result = await generateChordObject(userMessage, SingleChordSchema);
-            return createResponse(result);
-        }
-
-        if (!prompt) {
-            throw Object.assign(new Error('Prompt is required for progression generation.'), { status: 400 });
-        }
-
-        const count = (typeof numChords === 'number' && numChords >= 2 && numChords <= 8) ? numChords : 4;
-        const userMessage = buildProgressionMessage(prompt, count);
-        const result = await generateChordObject(userMessage, createProgressionSchema(count));
-        return createResponse(result);
-
-    } catch (err: unknown) {
-        const e = err as ApiError;
-        console.error('[API generate] Error:', e.message);
-
-        if (e.details) {
-            return createResponse({ error: e.message, details: e.details }, e.status || 500);
-        }
-        return createResponse({ error: e.message || 'Internal server error' }, e.status || 500);
+    if (typeof addChordPosition === 'number') {
+        const history = normalizeHistory(body.rounds);
+        return generateStructured({
+            task: 'generate:add-chord',
+            userMessage: buildAddChordMessage(prompt, existingChords, addChordPosition, history),
+            system: CHORD_GENERATION_SYSTEM_PROMPT,
+            schema: SingleChordSchema,
+        });
     }
-}
+
+    if (!prompt) {
+        throw new AiRouteError('Prompt is required for progression generation.', 400);
+    }
+
+    const count = clampChordCount(numChords ?? 4);
+
+    // A bare prompt with no session context always asks the same question, so
+    // repeat requests for a popular prompt can share an answer.
+    const key = cacheKey(['generate', prompt, count]);
+    const cached = readCache<{ chords: string[] }>(key);
+    if (cached) return cached;
+
+    const result = await generateStructured({
+        task: 'generate',
+        userMessage: buildProgressionMessage(prompt, count),
+        system: CHORD_GENERATION_SYSTEM_PROMPT,
+        schema: createProgressionSchema(count),
+    });
+
+    writeCache(key, result);
+    return result;
+});

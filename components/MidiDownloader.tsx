@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
@@ -26,32 +26,34 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({
     compact = false,
     variant,
 }) => {
-    const [midiUrl, setMidiUrl] = useState<string>("");
-
     // A bare chord list still exports, by adopting the document defaults.
     const exportDoc = useMemo(
         () => doc ?? docFromChords(chords ?? [], { prompt }),
         [doc, chords, prompt],
     );
 
-    useEffect(() => {
-        const bytes = exportDoc.slots.length ? buildMidi(exportDoc) : null;
-        if (!bytes) {
-            setMidiUrl("");
-            return;
-        }
+    // Building the bytes is pure, so it can be derived. The blob URL is not,
+    // and is created on click instead — a results page renders several of these
+    // and only one is ever downloaded.
+    const bytes = useMemo(
+        () => (exportDoc.slots.length ? buildMidi(exportDoc) : null),
+        [exportDoc],
+    );
 
+    if (!bytes) return null;
+
+    const handleDownloadClick = () => {
         const url = URL.createObjectURL(
             new Blob([bytes as BlobPart], { type: "audio/midi" }),
         );
-        setMidiUrl(url);
 
-        return () => URL.revokeObjectURL(url);
-    }, [exportDoc]);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = midiFilename(exportDoc);
+        link.click();
+        // Give the browser a tick to start the download before the URL goes away.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-    if (!midiUrl) return null;
-
-    const handleDownloadClick = () => {
         toast.success("Download Started!", {
             description: "Drag the MIDI file into your DAW to use it.",
         });
@@ -64,19 +66,13 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({
 
     return (
         <Button
-            asChild
             variant={variant ?? (compact ? "outline" : "default")}
             size={compact ? "sm" : "default"}
             onClick={handleDownloadClick}
+            className="flex items-center gap-1"
         >
-            <a
-                href={midiUrl}
-                download={midiFilename(exportDoc)}
-                className="flex items-center gap-1"
-            >
-                <Download className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                {compact ? "MIDI" : "Download MIDI"}
-            </a>
+            <Download className={compact ? "h-4 w-4" : "h-5 w-5"} />
+            {compact ? "MIDI" : "Download MIDI"}
         </Button>
     );
 };

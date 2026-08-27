@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { premiumGenerations } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { FREE_PREMIUM_GENERATIONS_PER_DAY, PRO_PREMIUM_GENERATIONS_PER_DAY } from "@/lib/ai";
+import { FREE_PREMIUM_GENERATIONS_PER_DAY, PRO_PREMIUM_GENERATIONS_PER_DAY } from "@/lib/ai/models";
 import { getUserRole } from "@/lib/premium";
 
 export const runtime = "edge";

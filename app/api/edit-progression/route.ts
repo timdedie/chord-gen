@@ -1,7 +1,8 @@
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 import { EditProgressionSchema } from '@/lib/schemas';
-import { generateChordObject, createResponse } from '@/lib/ai';
+import { aiRoute, AiRouteError, generateStructured } from '@/lib/ai/gateway';
+import { CHORD_GENERATION_SYSTEM_PROMPT } from '@/lib/prompts/system';
 import { buildEditProgressionMessage } from '@/lib/prompts/edit-progression';
 
 interface RequestBody {
@@ -10,34 +11,22 @@ interface RequestBody {
     prompt?: string;
 }
 
-interface ApiError extends Error {
-    status?: number;
-    details?: unknown;
-}
+// Previously the only route with no authentication and no rate limiting, which
+// left an unmetered model endpoint open to anyone. `aiRoute` applies both.
+export const POST = aiRoute<RequestBody>('edit-progression', async ({ body }) => {
+    const { chords = [], feedback, prompt } = body;
 
-export async function POST(request: Request): Promise<Response> {
-    try {
-        const body = (await request.json()) as RequestBody;
-        const { chords = [], feedback, prompt } = body;
-
-        if (!chords.length) {
-            throw Object.assign(new Error('Chords are required to edit a progression.'), { status: 400 });
-        }
-        if (!feedback?.trim()) {
-            throw Object.assign(new Error('Feedback is required to edit a progression.'), { status: 400 });
-        }
-
-        const userMessage = buildEditProgressionMessage(chords, feedback.trim(), prompt);
-        const result = await generateChordObject(userMessage, EditProgressionSchema);
-        return createResponse(result);
-
-    } catch (err: unknown) {
-        const e = err as ApiError;
-        console.error('[API edit-progression] Error:', e.message);
-
-        if (e.details) {
-            return createResponse({ error: e.message, details: e.details }, e.status || 500);
-        }
-        return createResponse({ error: e.message || 'Internal server error' }, e.status || 500);
+    if (!chords.length) {
+        throw new AiRouteError('Chords are required to edit a progression.', 400);
     }
-}
+    if (!feedback?.trim()) {
+        throw new AiRouteError('Feedback is required to edit a progression.', 400);
+    }
+
+    return generateStructured({
+        task: 'edit-progression',
+        userMessage: buildEditProgressionMessage(chords, feedback.trim(), prompt),
+        system: CHORD_GENERATION_SYSTEM_PROMPT,
+        schema: EditProgressionSchema,
+    });
+});
