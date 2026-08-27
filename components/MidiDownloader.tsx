@@ -1,119 +1,66 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
-import MidiWriter from "midi-writer-js";
-import { Chord } from "tonal";
 import { toast } from "sonner";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
+import { docFromChords } from "@/lib/progression/doc";
+import { buildMidi, midiFilename } from "@/lib/progression/midi";
+import type { ProgressionDoc } from "@/lib/progression/types";
 
 interface MidiDownloaderProps {
-    chords: string[];
+    /** Legacy chord list. Ignored when `doc` is supplied. */
+    chords?: string[];
+    /** The progression document — carries tempo, durations and voicing. */
+    doc?: ProgressionDoc;
     prompt: string;
     compact?: boolean;
     variant?: React.ComponentProps<typeof Button>["variant"];
 }
 
-const MidiDownloader: React.FC<MidiDownloaderProps> = ({ chords, prompt, compact = false, variant }) => {
+const MidiDownloader: React.FC<MidiDownloaderProps> = ({
+    chords,
+    doc,
+    prompt,
+    compact = false,
+    variant,
+}) => {
     const [midiUrl, setMidiUrl] = useState<string>("");
-    const [hasValidChords, setHasValidChords] = useState<boolean>(false);
 
-    // Builds a Blob URL for the current chords. setState calls here manage
-    // the object URL's lifecycle (created/revoked alongside the effect), and
-    // midiUrl is intentionally left out of the deps to avoid retriggering
-    // this effect when it sets its own state.
-    /* eslint-disable react-hooks/set-state-in-effect */
+    // A bare chord list still exports, by adopting the document defaults.
+    const exportDoc = useMemo(
+        () => doc ?? docFromChords(chords ?? [], { prompt }),
+        [doc, chords, prompt],
+    );
+
     useEffect(() => {
-        if (!chords || chords.length === 0) {
-            if (midiUrl) URL.revokeObjectURL(midiUrl);
+        const bytes = exportDoc.slots.length ? buildMidi(exportDoc) : null;
+        if (!bytes) {
             setMidiUrl("");
-            setHasValidChords(false);
             return;
         }
 
-        const track = new MidiWriter.Track();
-        track.setTimeSignature(4, 4, 24, 8);
-        track.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
+        const url = URL.createObjectURL(
+            new Blob([bytes as BlobPart], { type: "audio/midi" }),
+        );
+        setMidiUrl(url);
 
-        let validChordsFound = false;
-        chords.forEach((ch) => {
-            const chordData = Chord.get(ch);
-            if (chordData.empty || !chordData.notes || chordData.notes.length === 0) {
-                console.warn(`Skipping empty or invalid chord for MIDI: ${ch}`);
-                return;
-            }
-            const notes = chordData.notes.map((n) =>
-                /\d/.test(n) ? n : `${n}4`
-            );
-            track.addEvent(new MidiWriter.NoteEvent({ pitch: notes, duration: "1" }));
-            validChordsFound = true;
-        });
+        return () => URL.revokeObjectURL(url);
+    }, [exportDoc]);
 
-        if (!validChordsFound) {
-            if (midiUrl) URL.revokeObjectURL(midiUrl);
-            setMidiUrl("");
-            setHasValidChords(false);
-            return;
-        }
-
-        setHasValidChords(true);
-        const writer = new MidiWriter.Writer([track]);
-        const blob = new Blob([writer.buildFile() as BlobPart], {
-            type: "audio/midi",
-        });
-        const newUrl = URL.createObjectURL(blob);
-
-        if (midiUrl) {
-            URL.revokeObjectURL(midiUrl);
-        }
-        setMidiUrl(newUrl);
-
-        return () => {
-            URL.revokeObjectURL(newUrl);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chords]);
-    /* eslint-enable react-hooks/set-state-in-effect */
+    if (!midiUrl) return null;
 
     const handleDownloadClick = () => {
-        if (!midiUrl || !hasValidChords) {
-            toast.error("MIDI Not Ready", {
-                description: "No valid chords to download.",
-            });
-            return;
-        }
         toast.success("Download Started!", {
             description: "Drag the MIDI file into your DAW to use it.",
         });
         // The activation / "value moment" — user is taking a progression into a DAW.
         capture(AnalyticsEvent.MidiExported, {
-            chord_count: chords.length,
+            chord_count: exportDoc.slots.length,
             prompt_length: prompt.length,
         });
     };
-
-    const sanitizePromptForFilename = (text: string) => {
-        if (!text) return "prompt";
-        return text
-            .toLowerCase()
-            .replace(/\s+/g, '_')
-            .replace(/[^\w-]+/g, '')
-            .substring(0, 50);
-    };
-
-    const generateFilename = () => {
-        const sanitizedPrompt = sanitizePromptForFilename(prompt);
-        if (!chords || chords.length === 0) {
-            return `${sanitizedPrompt}_progression.mid`;
-        }
-        const safeChords = chords.map(chord => chord.replace(/\//g, '-').replace(/\s+/g, '_'));
-        return `${sanitizedPrompt}_${safeChords.join('_')}.mid`;
-    };
-
-    if (!midiUrl || !hasValidChords) {
-        return null;
-    }
 
     return (
         <Button
@@ -124,7 +71,7 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({ chords, prompt, compact
         >
             <a
                 href={midiUrl}
-                download={generateFilename()}
+                download={midiFilename(exportDoc)}
                 className="flex items-center gap-1"
             >
                 <Download className={compact ? "h-4 w-4" : "h-5 w-5"} />

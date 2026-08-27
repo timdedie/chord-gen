@@ -2,10 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
+import type { ProgressionDoc } from "@/lib/progression/types";
 
 export interface SavedProgression {
     id: string;
     chords: string[];
+    /** Present on everything read back from the server. */
+    doc?: ProgressionDoc;
     style: string;
     prompt: string;
     savedAt: number;
