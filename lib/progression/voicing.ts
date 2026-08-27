@@ -93,6 +93,54 @@ function shellPitchClasses(symbol: string): string[] | null {
     return triad.length >= 2 ? triad : null;
 }
 
+/** Reorder pitch classes to start on the root, undoing tonal's bass-first order. */
+function rootOrdered(notes: string[], tonic: string | null): string[] {
+    if (!tonic) return notes;
+    const index = notes.indexOf(tonic);
+    return index <= 0 ? notes : [...notes.slice(index), ...notes.slice(0, index)];
+}
+
+/**
+ * Low interval limits: the smallest interval that stays clear rather than muddy
+ * at a given bass pitch. Standard arranging practice — two notes a tone apart
+ * read fine at the top of the staff and turn to mud an octave below middle C.
+ */
+const LOW_INTERVAL_LIMITS: Array<[maxMidi: number, minSemitones: number]> = [
+    [40, 7], // up to E2  — nothing closer than a fifth
+    [45, 5], // up to A2  — a fourth
+    [47, 4], // up to B2  — a major third
+    [52, 3], // up to E3  — a minor third
+    [53, 2], // up to F3  — a major second
+];
+
+function smallestSafeInterval(midi: number): number {
+    for (const [maxMidi, minSemitones] of LOW_INTERVAL_LIMITS) {
+        if (midi <= maxMidi) return minSemitones;
+    }
+    return 1;
+}
+
+/**
+ * Open out any pair of voices packed too closely for their register, by lifting
+ * the upper one an octave. A no-op for chords that were already clear.
+ */
+function respectLowIntervalLimits(notes: string[]): string[] {
+    const result = [...notes];
+
+    for (let i = 0; i < result.length - 1; i += 1) {
+        const lower = Note.midi(result[i]);
+        const upper = Note.midi(result[i + 1]);
+        if (lower === null || upper === null) continue;
+
+        if (upper - lower < smallestSafeInterval(lower)) {
+            const lifted = Note.transpose(result[i + 1], "8P");
+            if (Note.midi(lifted) !== null) result[i + 1] = lifted;
+        }
+    }
+
+    return result.sort(byPitch);
+}
+
 function shape(notes: string[], voicing: VoicingShape): string[] {
     switch (voicing) {
         case "drop2":
@@ -122,11 +170,17 @@ export function voiceChord(slot: ChordSlot): VoicedChord {
     const octave = slot.octave ?? DEFAULT_OCTAVE;
     const voicing = slot.voicing ?? DEFAULT_VOICING;
 
+    // tonal orders a slash chord's notes bass-first, so stacking them directly
+    // would start the upper structure on the bass note — doubling it against
+    // the bass an octave below and leaving a semitone or tone cluster in the
+    // low register. Pianists voice the upper structure from the root instead.
+    const chordTones = rootOrdered(chord.notes, chord.tonic);
+
     const source =
-        voicing === "shell" ? (shellPitchClasses(slot.symbol) ?? chord.notes) : chord.notes;
+        voicing === "shell" ? (shellPitchClasses(slot.symbol) ?? chordTones) : chordTones;
 
     const inverted = applyInversion(source, slot.inversion ?? 0);
-    const voices = shape(stackAscending(inverted, octave), voicing);
+    let voices = respectLowIntervalLimits(shape(stackAscending(inverted, octave), voicing));
     if (!voices.length) return EMPTY;
 
     // An explicit slot bass wins, then the chord's own (slash) bass, then
@@ -135,9 +189,19 @@ export function voiceChord(slot: ChordSlot): VoicedChord {
     const bassPc = slot.bass || chord.bass || inverted[0] || chord.tonic;
     const bass = `${bassPc}${octave - 1}`;
 
-    return Note.midi(bass) === null
-        ? { bass: null, voices, all: voices }
-        : { bass, voices, all: [bass, ...voices] };
+    const bassMidi = Note.midi(bass);
+    if (bassMidi === null) return { bass: null, voices, all: voices };
+
+    // The upper structure can still collide with the bass — Cmaj7/B puts B2
+    // a semitone under C3. Lift the whole structure rather than one voice, so
+    // the voicing keeps its shape.
+    const lowestVoice = Note.midi(voices[0]);
+    if (lowestVoice !== null && lowestVoice - bassMidi < smallestSafeInterval(bassMidi)) {
+        const lifted = voices.map((note) => Note.transpose(note, "8P"));
+        if (lifted.every((note) => Note.midi(note) !== null)) voices = lifted;
+    }
+
+    return { bass, voices, all: [bass, ...voices] };
 }
 
 export function voiceProgression(doc: ProgressionDoc): VoicedChord[] {
@@ -158,8 +222,13 @@ function voiceLeadingCost(from: string[], to: string[]): number {
 
 /**
  * Pick the inversion for each chord that minimises movement from the one
- * before it. Greedy and left-to-right, which is enough to visibly smooth a
- * progression; the first chord is left as authored.
+ * before it. Greedy and left-to-right; the first chord is left as authored.
+ *
+ * The bass is pinned to whatever it was before optimising. Inversion normally
+ * moves the bass, which would let this quietly rewrite Cmaj7-Am7-Fmaj7-G7 into
+ * a C-C-F-F bass line — turning Am7 into Am7/G7 into G7/F and changing the
+ * harmony it was asked to smooth. Root motion is the composer's; only the
+ * upper voices are ours to move.
  */
 export function optimizeVoiceLeading(slots: ChordSlot[]): ChordSlot[] {
     if (slots.length < 2) return slots;
@@ -175,10 +244,14 @@ export function optimizeVoiceLeading(slots: ChordSlot[]): ChordSlot[] {
             continue;
         }
 
+        const pinnedBass = slot.bass ?? voiceChord(slot).bass?.replace(/-?\d+$/, "");
+
         let best = slot;
         let bestCost = Infinity;
         for (let inversion = 0; inversion < size; inversion += 1) {
-            const candidate = { ...slot, inversion };
+            const candidate: ChordSlot = { ...slot, inversion };
+            if (pinnedBass) candidate.bass = pinnedBass;
+
             const { voices } = voiceChord(candidate);
             if (!voices.length) continue;
 
