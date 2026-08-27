@@ -63,38 +63,6 @@ const steps = [
     { number: '04', title: 'Export', description: 'Download the MIDI and drop it into your DAW.' },
 ];
 
-const genres: [string, string][] = [
-    ['lo-fi', 'Lo-Fi'],
-    ['jazz', 'Jazz'],
-    ['pop', 'Pop'],
-    ['edm', 'EDM'],
-    ['rnb', 'R&B'],
-    ['rock', 'Rock'],
-    ['blues', 'Blues'],
-    ['neo-soul', 'Neo-Soul'],
-    ['cinematic', 'Cinematic'],
-    ['ambient', 'Ambient'],
-    ['folk', 'Folk'],
-    ['country', 'Country'],
-    ['gospel', 'Gospel'],
-    ['bossa-nova', 'Bossa Nova'],
-];
-
-const keys: [string, string][] = [
-    ['c-major', 'C Major'],
-    ['g-major', 'G Major'],
-    ['d-major', 'D Major'],
-    ['a-major', 'A Major'],
-    ['e-major', 'E Major'],
-    ['f-major', 'F Major'],
-    ['a-minor', 'A Minor'],
-    ['e-minor', 'E Minor'],
-    ['d-minor', 'D Minor'],
-    ['b-minor', 'B Minor'],
-    ['f-sharp-minor', 'F♯ Minor'],
-    ['c-minor', 'C Minor'],
-];
-
 const faqSchema = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -394,76 +362,15 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* Browse by genre / key */}
-            <section className="px-4 py-24 sm:py-32">
-                <div className="mx-auto max-w-5xl">
-                    <div className="mb-12 max-w-3xl">
-                        <h2 className="mb-4 text-4xl font-black tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                            Browse by genre or key.
-                        </h2>
-                        <p className="text-lg font-medium text-gray-600 dark:text-gray-400 sm:text-xl">
-                            Chord references for common styles and keys.
-                        </p>
-                    </div>
-
-                    <div>
-                        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-                            <div className="rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
-                                <h3 className="mb-5 text-xl font-bold text-gray-900 dark:text-white">
-                                    Popular genres
-                                </h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {genres.map(([slug, label]) => (
-                                        <Link
-                                            key={slug}
-                                            href={`/chords/${slug}`}
-                                            className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-gray-900 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-200 dark:hover:text-white"
-                                        >
-                                            {label}
-                                        </Link>
-                                    ))}
-                                </div>
-                                <Link
-                                    href="/chords"
-                                    className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-gray-900 hover:underline dark:text-white"
-                                >
-                                    All genres <ChevronRight className="h-4 w-4" />
-                                </Link>
-                            </div>
-
-                            <div className="rounded-3xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-gray-900">
-                                <h3 className="mb-5 text-xl font-bold text-gray-900 dark:text-white">
-                                    Common keys
-                                </h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {keys.map(([slug, label]) => (
-                                        <Link
-                                            key={slug}
-                                            href={`/key/${slug}`}
-                                            className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-gray-900 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-200 dark:hover:text-white"
-                                        >
-                                            {label}
-                                        </Link>
-                                    ))}
-                                </div>
-                                <Link
-                                    href="/key"
-                                    className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-gray-900 hover:underline dark:text-white"
-                                >
-                                    All keys <ChevronRight className="h-4 w-4" />
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-10 text-center">
-                        <p className="text-sm text-gray-500 dark:text-gray-500">
-                            Coming from another chord tool?{' '}
-                            <Link href="/chordchord-alternative" className="font-bold text-gray-900 hover:underline dark:text-white">
-                                See how ChordGen compares as a free ChordChord alternative
-                            </Link>
-                        </p>
-                    </div>
+            {/* ChordChord comparison */}
+            <section className="px-4 py-16">
+                <div className="mx-auto max-w-5xl text-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-500">
+                        Coming from another chord tool?{' '}
+                        <Link href="/chordchord-alternative" className="font-bold text-gray-900 hover:underline dark:text-white">
+                            See how ChordGen compares as a free ChordChord alternative
+                        </Link>
+                    </p>
                 </div>
             </section>
 

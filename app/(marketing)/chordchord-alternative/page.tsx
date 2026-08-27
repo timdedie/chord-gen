@@ -237,28 +237,6 @@ export default function ChordChordAlternative() {
                         </Button>
                     </div>
 
-                    <section className="border-t border-gray-200 dark:border-gray-800 pt-12">
-                        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-6">
-                            Read next
-                        </h2>
-                        <ul className="space-y-3 text-base">
-                            <li>
-                                <Link href="/blog/free-online-piano-chord-generator" className="text-primary hover:underline">
-                                    → Free online piano chord generator: how ChordGen works
-                                </Link>
-                            </li>
-                            <li>
-                                <Link href="/blog/common-chord-progressions-guide" className="text-primary hover:underline">
-                                    → 12 chord progressions every songwriter should know
-                                </Link>
-                            </li>
-                            <li>
-                                <Link href="/chords/lo-fi" className="text-primary hover:underline">
-                                    → Lo-fi chord progressions
-                                </Link>
-                            </li>
-                        </ul>
-                    </section>
                 </div>
             </article>
 

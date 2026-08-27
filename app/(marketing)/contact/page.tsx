@@ -125,18 +125,8 @@ export default function ContactPage() {
                                 </Link>
                             </li>
                             <li>
-                                <Link href="/blog" className="text-primary hover:underline">
-                                    → Read the blog
-                                </Link>
-                            </li>
-                            <li>
-                                <Link href="/chords" className="text-primary hover:underline">
-                                    → Browse progressions by genre
-                                </Link>
-                            </li>
-                            <li>
-                                <Link href="/key" className="text-primary hover:underline">
-                                    → Browse progressions by key
+                                <Link href="/chordchord-alternative" className="text-primary hover:underline">
+                                    → ChordGen vs. ChordChord
                                 </Link>
                             </li>
                         </ul>
