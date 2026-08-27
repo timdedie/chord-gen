@@ -52,6 +52,8 @@ export default function MobileProgressionCard({
     const { piano, areSamplesLoaded, loadSamples, isLoadingSamples } = usePiano();
     const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const heldNotesRef = useRef<string[]>([]);
+    /** Notes still sounding from the last single-chord play. */
+    const singlePlayNotesRef = useRef<string[]>([]);
     const CHORD_PLAYBACK_INTERVAL = 1200;
 
     const playChordOnce = useCallback((chordSymbol: string) => {
@@ -65,7 +67,17 @@ export default function MobileProgressionCard({
 
         const noteDuration = 0.8;
         onActiveNotesChange(notesToPlay);
-        piano.triggerAttackRelease(notesToPlay, noteDuration, toneNow());
+
+        // See ChordColumnsContainer: the sampler's release tail keeps a chord
+        // sounding, so the previous copy is released before retriggering rather
+        // than left to stack and sum in amplitude.
+        const startTime = toneNow();
+        if (singlePlayNotesRef.current.length > 0) {
+            piano.triggerRelease(singlePlayNotesRef.current, startTime);
+        }
+        piano.triggerAttackRelease(notesToPlay, noteDuration, startTime + 0.01);
+        singlePlayNotesRef.current = notesToPlay;
+
         setTimeout(() => onActiveNotesChange([]), noteDuration * 1000);
     }, [piano, areSamplesLoaded, onActiveNotesChange]);
 

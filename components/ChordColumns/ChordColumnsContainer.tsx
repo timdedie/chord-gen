@@ -152,6 +152,8 @@ export default function ChordColumnsContainer({
   // --- Playback ---
 
   const singlePlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  /** Notes still sounding from the last single-chord play. */
+  const singlePlayNotesRef = useRef<string[]>([]);
 
   const playChordOnce = useCallback(
     async (chordSymbol: string, chordId?: string) => {
@@ -170,7 +172,19 @@ export default function ChordColumnsContainer({
 
       const noteDuration = 0.8;
       onActiveNotesChange(notesToPlay);
-      piano.triggerAttackRelease(notesToPlay, noteDuration, toneNow());
+
+      // The sampler has a 1s release tail, so a chord keeps sounding for well
+      // over a second after it is triggered. Releasing the previous copy first
+      // makes a repeat retrigger the chord the way a piano key does — without
+      // it, identical samples at identical pitches stack and sum in amplitude,
+      // so playing one chord repeatedly makes it phase and then clip.
+      const startTime = toneNow();
+      if (singlePlayNotesRef.current.length > 0) {
+        piano.triggerRelease(singlePlayNotesRef.current, startTime);
+      }
+      // A hair after the release, so the two don't land on the same instant and click.
+      piano.triggerAttackRelease(notesToPlay, noteDuration, startTime + 0.01);
+      singlePlayNotesRef.current = notesToPlay;
 
       if (chordId && !isPlaying) {
         if (singlePlayTimeoutRef.current) clearTimeout(singlePlayTimeoutRef.current);
