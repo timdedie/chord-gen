@@ -85,9 +85,16 @@ export function normalizeDoc(raw: unknown, fallbackChords: string[] = []): Progr
         });
     }
 
+    // Nothing before version 3 could choose a voicing — no surface exposed the
+    // field — so a stored shape there is the old default rather than a
+    // decision, and is dropped so those progressions get the current engine.
+    const storedVoicings = candidate.version === DOC_VERSION;
+
     const slots = candidate.slots
         .filter((slot) => slot && typeof slot.symbol === "string")
-        .map((slot) => createSlot(slot.symbol, slot))
+        .map((slot) =>
+            createSlot(slot.symbol, storedVoicings ? slot : { ...slot, voicing: undefined }),
+        )
         .filter((slot) => !Chord.get(slot.symbol).empty);
 
     if (!slots.length) return docFromChords(fallbackChords);

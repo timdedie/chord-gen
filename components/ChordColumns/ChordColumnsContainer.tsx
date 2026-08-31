@@ -21,7 +21,7 @@ import { ColumnsSkeleton } from "./ProgressionSkeleton";
 import { Chord } from "tonal";
 import { now as toneNow, type Sampler } from "tone";
 import { usePiano } from "@/components/PianoProvider";
-import { getVoicedChordNotes } from "@/lib/chordUtils";
+import { voiceProgressionNotes } from "@/lib/chordUtils";
 import { generateChordColors } from "@/lib/chordColors";
 import { useTheme } from "next-themes";
 import ChordColumn from "./ChordColumn";
@@ -149,6 +149,19 @@ export default function ChordColumnsContainer({
   const heldNotesRef = useRef<string[]>([]);
   const CHORD_PLAYBACK_INTERVAL = 1200;
 
+  /**
+   * Every chord's notes, voiced as one progression.
+   *
+   * Voicing is progression-level — each chord is placed to move least from the
+   * one before it — so it cannot be computed inside the play handlers a chord
+   * at a time. Recomputed whenever the strip changes, which is also what keeps
+   * a clicked chord sounding the same as it does mid-playback.
+   */
+  const voicings = useMemo(
+    () => voiceProgressionNotes(chords.map((c) => c.chord)),
+    [chords]
+  );
+
   // Generate colors based on current chords
   const colors = generateChordColors(
     chords.map((c) => c.chord),
@@ -202,7 +215,10 @@ export default function ChordColumnsContainer({
       if (!instrument) return;
       onChordPlay?.(chordSymbol);
 
-      const notesToPlay = getVoicedChordNotes(chordSymbol);
+      // Play the chord as it sits in this progression, not in isolation, so a
+      // single click and the full run-through sound identical.
+      const index = chords.findIndex((c) => c.id === chordId);
+      const notesToPlay = voicings[index] ?? [];
       if (notesToPlay.length === 0) {
         onActiveNotesChange([]);
         return;
@@ -232,7 +248,15 @@ export default function ChordColumnsContainer({
         if (chordId) setPlayingChordId((prev) => (prev === chordId ? null : prev));
       }, noteDuration * 1000);
     },
-    [ensureInstrument, releaseSinglePlay, onActiveNotesChange, onChordPlay, isPlaying]
+    [
+      ensureInstrument,
+      releaseSinglePlay,
+      onActiveNotesChange,
+      onChordPlay,
+      isPlaying,
+      chords,
+      voicings,
+    ]
   );
 
   const pauseProgression = useCallback(() => {
@@ -269,7 +293,7 @@ export default function ChordColumnsContainer({
       const instrument = pianoRef.current;
       if (chordToPlay && instrument) {
         setPlayingChordId(chordToPlay.id);
-        const newNotes = getVoicedChordNotes(chordToPlay.chord);
+        const newNotes = voicings[index] ?? [];
 
         if (newNotes.length > 0) {
           if (heldNotesRef.current.length > 0) {
@@ -287,7 +311,7 @@ export default function ChordColumnsContainer({
         pauseProgression();
       }
     },
-    [chords, pauseProgression, onActiveNotesChange]
+    [chords, voicings, pauseProgression, onActiveNotesChange]
   );
   useEffect(() => {
     playNextChordRef.current = playNextChord;

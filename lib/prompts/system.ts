@@ -7,9 +7,10 @@
  * now, so the model is asked only for the thing it is uniquely good at: reading
  * intent out of a natural-language prompt and choosing a harmonic narrative.
  *
- * Voicing and inversion guidance is deliberately absent too — `voiceChord` and
- * `optimizeVoiceLeading` decide realisation. Slash chords stay, because which
- * bass note a chord sits on is a compositional choice, not a realisation one.
+ * Voicing and inversion guidance is deliberately absent too — `voiceSlots`
+ * decides realisation, thinning each chord and placing it against the one
+ * before. Slash chords stay, because which bass note a chord sits on is a
+ * compositional choice, not a realisation one.
  */
 export const CHORD_GENERATION_SYSTEM_PROMPT = `
 You are an expert songwriter and composer. Your goal is to create chord progressions that feel fresh and emotionally compelling — never generic stock patterns.

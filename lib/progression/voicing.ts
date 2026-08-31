@@ -3,17 +3,24 @@ import {
     DEFAULT_OCTAVE,
     DEFAULT_VOICING,
     type ChordSlot,
-    type ProgressionDoc,
     type VoicingShape,
+    type ProgressionDoc,
 } from "./types";
 
 /**
  * The single voicing engine.
  *
  * Playback and MIDI export used to compute notes independently — playback via
- * `getVoicedChordNotes` (bass + ascending stack) and the exporter via raw
+ * a bass-plus-ascending-stack helper and the exporter via raw
  * `Chord.get().notes` at octave 4 — so what you heard was not what you
- * exported. Both now go through `voiceChord`.
+ * exported. Both now go through this module.
+ *
+ * There are two paths. `"auto"` (the default) voices a chord *in the context of
+ * the one before it*: it thins the chord to the tones worth sounding, then
+ * searches the placements of those tones for the one that moves least. The
+ * named shapes (`close`, `drop2`, `drop3`, `shell`, `spread`) are the literal,
+ * context-free realisations the advanced editor asks for by name, and are left
+ * exactly as authored — predictability is the point of that surface.
  *
  * tonal's own `Voicing` module is deliberately not used: its dictionary covers
  * only 16 chord types (sus and extended chords return `undefined`), it drops
@@ -22,7 +29,7 @@ import {
  */
 
 export interface VoicedChord {
-    /** The bass note, an octave below the chord voices. Null if unparseable. */
+    /** The bass note, below the chord voices. Null if unparseable. */
     bass: string | null;
     /** The chord voices, ascending. */
     voices: string[];
@@ -31,6 +38,20 @@ export interface VoicedChord {
 }
 
 const EMPTY: VoicedChord = { bass: null, voices: [], all: [] };
+
+/**
+ * Assemble the result, spelling every note with at most one accidental.
+ *
+ * All the pitch maths above needs tonal's strict spellings, but Cdim7 resolves
+ * its seventh to Bbb and the keyboard drops anything that is not `[A-G][#b]?`
+ * on the floor — so that voice sounded without ever lighting up a key.
+ * `Note.simplify` is pitch-preserving, so this only changes how notes read.
+ */
+function voiced(bass: string | null, voices: string[]): VoicedChord {
+    const spelled = voices.map((n) => Note.simplify(n) || n);
+    const low = bass ? Note.simplify(bass) || bass : null;
+    return { bass: low, voices: spelled, all: low ? [low, ...spelled] : spelled };
+}
 
 /** Stack pitch classes upward, each note strictly above the previous. */
 function stackAscending(pcs: string[], startOctave: number): string[] {
@@ -162,13 +183,226 @@ function shape(notes: string[], voicing: VoicingShape): string[] {
     }
 }
 
-/** Resolve a slot to concrete pitched notes. */
-export function voiceChord(slot: ChordSlot): VoicedChord {
+/* ------------------------------------------------------------------ *
+ * Automatic voicing: which tones to sound
+ * ------------------------------------------------------------------ */
+
+/** The most voices the automatic path will sound above the bass. */
+const MAX_VOICES = 4;
+
+interface Tone {
+    note: string;
+    num: number;
+    quality: string;
+}
+
+const isRoot = (t: Tone) => t.num === 1;
+const isPerfectFifth = (t: Tone) => t.num === 5 && t.quality === "P";
+/** b5 and #5 name the chord as surely as its 3rd does. */
+const isAlteredFifth = (t: Tone) => t.num === 5 && t.quality !== "P";
+/** The 3rd, or the 2nd/4th standing in for it in a sus chord. */
+const isThird = (t: Tone) => t.num === 2 || t.num === 3 || t.num === 4;
+const isSeventh = (t: Tone) => t.num === 6 || t.num === 7;
+
+/**
+ * Choose which of a chord's tones are actually worth sounding.
+ *
+ * Sounding all of them is what made extended chords muddy: `Am11` came out as
+ * seven notes across three octaves. A player drops tones in a well-known order
+ * — the 5th first, because it carries no information, then the root, because
+ * the bass is already playing it two octaves down. The 3rd and 7th are the
+ * tones that say which chord this is, so they are the last to go.
+ */
+function selectTones(symbol: string): string[] {
+    const { notes, intervals } = Chord.get(symbol);
+    if (!notes.length || notes.length !== intervals.length) return notes;
+
+    let kept: Tone[] = notes.map((note, i) => {
+        const interval = Interval.get(intervals[i]);
+        return { note, num: interval.num ?? 0, quality: interval.q ?? "" };
+    });
+
+    const dropFirst = (predicate: (t: Tone) => boolean) => {
+        const index = kept.findIndex(predicate);
+        if (index >= 0) kept = kept.filter((_, i) => i !== index);
+    };
+
+    // An altered 5th (b5, #5, dim, aug) defines the chord and always stays.
+    if (kept.length > MAX_VOICES) dropFirst(isPerfectFifth);
+    if (kept.length > MAX_VOICES) dropFirst(isRoot);
+
+    // Least characteristic first. An altered 5th is protected alongside the 3rd
+    // and 7th until nothing else is left to give: C13b5 has no perfect 5th to
+    // shed, and dropping the b5 instead would leave a chord that is not C13b5.
+    while (kept.length > MAX_VOICES) {
+        const victim =
+            kept.find((t) => t.num === 11) ??
+            kept.find(isPerfectFifth) ??
+            kept.find(isRoot) ??
+            kept.find((t) => !isThird(t) && !isSeventh(t) && !isAlteredFifth(t)) ??
+            kept.find((t) => !isThird(t) && !isSeventh(t));
+        if (!victim) break;
+        kept = kept.filter((t) => t !== victim);
+    }
+
+    return kept.map((t) => t.note);
+}
+
+/* ------------------------------------------------------------------ *
+ * Automatic voicing: where to put them
+ * ------------------------------------------------------------------ */
+
+/**
+ * The register the upper structure lives in, as MIDI numbers. Voicing this
+ * high is half the fix on its own: the old engine stacked close-position
+ * sevenths from C3, which is exactly the register where they turn boxy.
+ */
+const FLOOR = 58; // Bb3
+const CEILING = 84; // C6
+/** Where the top voice — the line the ear actually follows — wants to sit. */
+const TOP_TARGET = 72; // C5
+const MAX_SPAN = 14;
+
+/**
+ * Every placement of these pitch classes that fits the register window.
+ *
+ * The rotations are taken over *chromatic* order, not tonal's stacked-thirds
+ * order. Once the 5th and root are gone a stacked-thirds rotation spans an
+ * 11th or more — G13 becomes B-F-A-E, 17 semitones, which fits no window at
+ * all — whereas rotating chromatic order generates exactly the compact
+ * inversions a hand can reach.
+ */
+function placements(pcs: string[], maxSpan: number, ceiling: number): string[][] {
+    const chromatic = [...pcs].sort((a, b) => (Note.chroma(a) ?? 0) - (Note.chroma(b) ?? 0));
+    const out: string[][] = [];
+
+    for (let rotation = 0; rotation < chromatic.length; rotation += 1) {
+        const order = [...chromatic.slice(rotation), ...chromatic.slice(0, rotation)];
+
+        for (const startOctave of [3, 4, 5]) {
+            const voiced = stackAscending(order, startOctave);
+            if (voiced.length !== order.length) continue;
+
+            const low = Note.midi(voiced[0]);
+            const high = Note.midi(voiced[voiced.length - 1]);
+            if (low === null || high === null) continue;
+            if (low < FLOOR || high > ceiling || high - low > maxSpan) continue;
+
+            out.push(voiced);
+        }
+    }
+    return out;
+}
+
+/**
+ * How bad a placement is, given what was playing before it.
+ *
+ * The top voice is weighted hardest because it is the line the ear tracks: a
+ * progression whose top note lurches around reads as clumsy even when every
+ * chord is individually correct. The pull toward `TOP_TARGET` is what stops
+ * the whole progression drifting out of register over eight chords.
+ */
+function placementCost(candidate: string[], previous: number[] | null): number {
+    const midi = candidate.map((n) => Note.midi(n) ?? 0);
+    const top = midi[midi.length - 1];
+    const previousTop = previous?.length ? previous[previous.length - 1] : TOP_TARGET;
+
+    let cost = 2.5 * Math.abs(top - previousTop) + 0.4 * Math.abs(top - TOP_TARGET);
+
+    // Semitones between adjacent voices are not banned — they are the sound of
+    // a maj7 or a b9 — but they muddy in proportion to how low they sit, so the
+    // bottom pair is charged hardest and a cleaner spelling wins the tie.
+    for (let i = 0; i < midi.length - 1; i += 1) {
+        if (midi[i + 1] - midi[i] === 1) cost += i === 0 ? 14 : 5;
+    }
+
+    // Nearest-note matching, not index matching: chords differ in voice count,
+    // and pairing by position invents motion that is not there.
+    if (previous?.length) {
+        for (const note of midi) {
+            cost += Math.min(...previous.map((p) => Math.abs(p - note)));
+        }
+    }
+
+    return cost;
+}
+
+interface AutoVoicing {
+    chord: VoicedChord;
+    /**
+     * What the search actually chose, before the octave doubling is added.
+     * The next chord leads from these: the doubled bass is a fixed low note
+     * under every chord, so counting it would bias the nearest-note matching
+     * toward whatever sits lowest rather than toward real voice motion.
+     */
+    placement: number[];
+}
+
+/** Resolve one chord automatically, given the voicing that preceded it. */
+function voiceAuto(slot: ChordSlot, previous: number[] | null): AutoVoicing {
+    const chord = Chord.get(slot.symbol);
+    if (chord.empty || !chord.notes.length || !chord.tonic) {
+        return { chord: EMPTY, placement: [] };
+    }
+
+    const pcs = selectTones(slot.symbol);
+    if (!pcs.length) return { chord: EMPTY, placement: [] };
+
+    // Widen the window rather than fall silent: a four-note 13th chord with no
+    // 5th and no root cannot always be packed inside a compact span.
+    let candidates = placements(pcs, MAX_SPAN, CEILING);
+    if (!candidates.length) candidates = placements(pcs, 17, CEILING + 4);
+    if (!candidates.length) candidates = placements(pcs, 24, 96);
+    if (!candidates.length) return { chord: EMPTY, placement: [] };
+
+    let voices = candidates.reduce((best, candidate) =>
+        placementCost(candidate, previous) < placementCost(best, previous) ? candidate : best,
+    );
+
+    // `octave` shifts the whole voicing rather than pinning the lowest voice:
+    // on this path the algorithm owns the register, and the field is left as a
+    // transposition so raising it still moves bass and chord together.
+    const shift = (slot.octave ?? DEFAULT_OCTAVE) - DEFAULT_OCTAVE;
+    if (shift !== 0) {
+        const moved = voices.map((n) => Note.transpose(n, Interval.fromSemitones(shift * 12)));
+        if (moved.every((n) => Note.midi(n) !== null)) voices = moved;
+    }
+
+    const placement = voices.map((n) => Note.midi(n) ?? 0);
+
+    const octave = slot.octave ?? DEFAULT_OCTAVE;
+    const bassPc = slot.bass || chord.bass || chord.tonic;
+    const bass = `${bassPc}${octave - 1}`;
+    if (Note.midi(bass) === null) return { chord: voiced(null, voices), placement };
+
+    // Double the bass an octave up, the way a left hand does.
+    //
+    // The upper structure lives at C4-C5 and the bass an octave below middle
+    // C, which leaves the better part of two octaves empty underneath — and a
+    // plain triad is only three notes up there. The progression comes out
+    // correct but hollow. This fills the gap without touching the voicing the
+    // search chose, and it stays out of the MIDI bass track: an octave belongs
+    // under the left hand, not in a bass part.
+    const doubled = `${bassPc}${octave}`;
+    const lowestVoice = placement.length ? placement[0] : Infinity;
+    const withDoubling =
+        Note.midi(doubled) !== null && (Note.midi(doubled) as number) < lowestVoice
+            ? [doubled, ...voices]
+            : voices;
+
+    return { chord: voiced(bass, withDoubling), placement };
+}
+
+/* ------------------------------------------------------------------ *
+ * Entry points
+ * ------------------------------------------------------------------ */
+
+/** Resolve one chord literally, honouring its named shape and inversion. */
+function voiceExplicit(slot: ChordSlot, voicing: VoicingShape): VoicedChord {
     const chord = Chord.get(slot.symbol);
     if (chord.empty || !chord.notes.length || !chord.tonic) return EMPTY;
 
     const octave = slot.octave ?? DEFAULT_OCTAVE;
-    const voicing = slot.voicing ?? DEFAULT_VOICING;
 
     // tonal orders a slash chord's notes bass-first, so stacking them directly
     // would start the upper structure on the bass note — doubling it against
@@ -190,7 +424,7 @@ export function voiceChord(slot: ChordSlot): VoicedChord {
     const bass = `${bassPc}${octave - 1}`;
 
     const bassMidi = Note.midi(bass);
-    if (bassMidi === null) return { bass: null, voices, all: voices };
+    if (bassMidi === null) return voiced(null, voices);
 
     // The upper structure can still collide with the bass — Cmaj7/B puts B2
     // a semitone under C3. Lift the whole structure rather than one voice, so
@@ -201,70 +435,62 @@ export function voiceChord(slot: ChordSlot): VoicedChord {
         if (lifted.every((note) => Note.midi(note) !== null)) voices = lifted;
     }
 
-    return { bass, voices, all: [bass, ...voices] };
-}
-
-export function voiceProgression(doc: ProgressionDoc): VoicedChord[] {
-    return doc.slots.map(voiceChord);
-}
-
-/** Total semitone travel between two voicings, matched lowest-to-highest. */
-function voiceLeadingCost(from: string[], to: string[]): number {
-    const a = from.map((n) => Note.midi(n) ?? 0);
-    const b = to.map((n) => Note.midi(n) ?? 0);
-    const shared = Math.min(a.length, b.length);
-
-    let cost = 0;
-    for (let i = 0; i < shared; i += 1) cost += Math.abs(a[i] - b[i]);
-    // Nudge away from voicings that change the number of voices.
-    return cost + Math.abs(a.length - b.length) * 6;
+    return voiced(bass, voices);
 }
 
 /**
- * Pick the inversion for each chord that minimises movement from the one
- * before it. Greedy and left-to-right; the first chord is left as authored.
+ * Resolve a single slot to concrete pitched notes.
  *
- * The bass is pinned to whatever it was before optimising. Inversion normally
- * moves the bass, which would let this quietly rewrite Cmaj7-Am7-Fmaj7-G7 into
- * a C-C-F-F bass line — turning Am7 into Am7/G7 into G7/F and changing the
- * harmony it was asked to smooth. Root motion is the composer's; only the
- * upper voices are ours to move.
+ * An `"auto"` slot voiced this way has no previous chord to lean on, so it
+ * lands in the middle of the register and nothing more. Prefer `voiceSlots`
+ * wherever the whole progression is known — voice leading is the larger half
+ * of what makes a progression sound clean, and it needs the context.
  */
-export function optimizeVoiceLeading(slots: ChordSlot[]): ChordSlot[] {
-    if (slots.length < 2) return slots;
-
-    const result: ChordSlot[] = [slots[0]];
-    let previous = voiceChord(slots[0]).voices;
-
-    for (const slot of slots.slice(1)) {
-        const size = Chord.get(slot.symbol).notes.length;
-        if (!size || !previous.length) {
-            result.push(slot);
-            previous = voiceChord(slot).voices;
-            continue;
-        }
-
-        const pinnedBass = slot.bass ?? voiceChord(slot).bass?.replace(/-?\d+$/, "");
-
-        let best = slot;
-        let bestCost = Infinity;
-        for (let inversion = 0; inversion < size; inversion += 1) {
-            const candidate: ChordSlot = { ...slot, inversion };
-            if (pinnedBass) candidate.bass = pinnedBass;
-
-            const { voices } = voiceChord(candidate);
-            if (!voices.length) continue;
-
-            const cost = voiceLeadingCost(previous, voices);
-            if (cost < bestCost) {
-                bestCost = cost;
-                best = candidate;
-            }
-        }
-
-        result.push(best);
-        previous = voiceChord(best).voices;
-    }
-
-    return result;
+export function voiceChord(slot: ChordSlot): VoicedChord {
+    const voicing = slot.voicing ?? DEFAULT_VOICING;
+    return voicing === "auto" ? voiceAuto(slot, null).chord : voiceExplicit(slot, voicing);
 }
+
+/**
+ * Resolve a whole progression, each `"auto"` chord voiced against the last.
+ *
+ * Only the upper structure moves. The bass stays on the root, or on the slash
+ * bass when the symbol names one, so smoothing can never quietly rewrite
+ * Cmaj7-Am7-Fmaj7-G7 into a C-C-F-F bass line and change the harmony it was
+ * asked to smooth. Root motion is the composer's; the voices above it are ours.
+ */
+export function voiceSlots(slots: ChordSlot[]): VoicedChord[] {
+    let previous: number[] | null = null;
+
+    return slots.map((slot) => {
+        const voicing = slot.voicing ?? DEFAULT_VOICING;
+
+        if (voicing === "auto") {
+            const { chord, placement } = voiceAuto(slot, previous);
+            if (placement.length) previous = placement;
+            return chord;
+        }
+
+        // A named shape is not smoothed, but the chord after it still leads
+        // from wherever it actually landed.
+        const chord = voiceExplicit(slot, voicing);
+        if (chord.voices.length) previous = chord.voices.map((n) => Note.midi(n) ?? 0);
+        return chord;
+    });
+}
+
+export function voiceProgression(doc: ProgressionDoc): VoicedChord[] {
+    return voiceSlots(doc.slots);
+}
+
+/**
+ * The pitch range this engine can produce, for anything that has to display it.
+ *
+ * The keyboard used to hardcode C3-C5, which was right for the old engine and
+ * silently wrong for this one: a quarter of every voicing fell outside it and
+ * simply never lit up. The low end is a bass an octave below the chord, and Cb2
+ * spells as B1 — so A1 rather than C2. The high end is `CEILING`. Anything
+ * reading this should read it rather than restate it; a slot with a raised
+ * `octave` can still exceed it, and callers should clamp rather than assume.
+ */
+export const VOICED_RANGE = { low: "A1", high: "C6" } as const;

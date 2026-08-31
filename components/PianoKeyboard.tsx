@@ -16,7 +16,7 @@ export default function PianoKeyboard({
                                           firstNote,
                                           lastNote,
                                           activeNotes,
-                                          width = 400,
+                                          width = 720,
                                       }: PianoKeyboardProps) {
     const { piano, areSamplesLoaded, loadSamples, resumeAudio } = usePiano();
     const [isMobile, setIsMobile] = useState(false);
@@ -30,7 +30,10 @@ export default function PianoKeyboard({
         return () => mq.removeEventListener("change", handler);
     }, []);
 
-    const responsiveWidth = isMobile ? Math.min(window.innerWidth * 0.7, 180) : width;
+    // Widened along with the note range: the keyboard now spans A1-C6 to cover
+    // everything the voicing engine can produce, which is 30 white keys rather
+    // than 15, and the old caps would have halved the key size.
+    const responsiveWidth = isMobile ? Math.min(window.innerWidth * 0.9, 320) : width;
 
     const handlePlayNote = (midiNumber: number) => {
         // Pressing a key is a user gesture — the one moment a browser will let
@@ -69,7 +72,7 @@ export default function PianoKeyboard({
 
     return (
         <div className={`fixed bottom-0 left-0 right-0 flex justify-center z-30 transition-[left] duration-200 md:left-[var(--sidebar-w,3.5rem)] ${isMobile ? 'p-2' : 'p-4'}`}>
-            <div className={`w-full ${isMobile ? 'max-w-[180px]' : 'max-w-[400px]'} bg-transparent`}>
+            <div className={`w-full ${isMobile ? 'max-w-[320px]' : 'max-w-[720px]'} bg-transparent`}>
                 <div className="bg-transparent drop-shadow-lg">
                     <Piano
                         noteRange={{ first: firstNote, last: lastNote }}

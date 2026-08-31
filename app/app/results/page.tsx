@@ -16,6 +16,7 @@ import ProgressionSkeleton from "@/components/ChordColumns/ProgressionSkeleton";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
+import { VOICED_RANGE } from "@/lib/progression/voicing";
 
 interface ProgressionData {
     id: string;
@@ -267,8 +268,10 @@ function ResultsContent() {
         setActiveNotes(notes);
     }, []);
 
-    const firstNote = MidiNumbers.fromNote("C3");
-    const lastNote = MidiNumbers.fromNote("C5");
+    // Sized from the voicing engine rather than restated here, so the two
+    // cannot drift apart — see VOICED_RANGE.
+    const firstNote = MidiNumbers.fromNote(VOICED_RANGE.low);
+    const lastNote = MidiNumbers.fromNote(VOICED_RANGE.high);
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors duration-300">

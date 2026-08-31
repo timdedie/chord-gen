@@ -8,6 +8,7 @@ import { SignInButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePiano } from "@/components/PianoProvider";
+import { VOICED_RANGE } from "@/lib/progression/voicing";
 
 const PianoKeyboard = dynamic(() => import("@/components/PianoKeyboard"), { ssr: false });
 const ChordColumnsContainer = dynamic(
@@ -30,8 +31,10 @@ export default function SavedPage() {
         setActiveNotes(notes);
     }, []);
 
-    const firstNote = MidiNumbers.fromNote("C3");
-    const lastNote = MidiNumbers.fromNote("C5");
+    // Sized from the voicing engine rather than restated here, so the two
+    // cannot drift apart — see VOICED_RANGE.
+    const firstNote = MidiNumbers.fromNote(VOICED_RANGE.low);
+    const lastNote = MidiNumbers.fromNote(VOICED_RANGE.high);
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors duration-300">

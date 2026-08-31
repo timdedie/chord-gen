@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import ChordSymbol from "@/components/ChordSymbol";
 import { now as toneNow, type Sampler } from "tone";
 import { usePiano } from "@/components/PianoProvider";
-import { getVoicedChordNotes } from "@/lib/chordUtils";
+import { voiceProgressionNotes } from "@/lib/chordUtils";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +49,9 @@ export default function MobileProgressionCard({
     const explanationAbortControllerRef = useRef<AbortController | null>(null);
     const currentProgressionKeyRef = useRef<string>("");
 
+    /** See ChordColumnsContainer — voicing reads the whole progression. */
+    const voicings = useMemo(() => voiceProgressionNotes(initialChords), [initialChords]);
+
     const { piano, loadSamples, resumeAudio } = usePiano();
     const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const heldNotesRef = useRef<string[]>([]);
@@ -85,11 +88,11 @@ export default function MobileProgressionCard({
         }
     }, []);
 
-    const playChordOnce = useCallback(async (chordSymbol: string) => {
+    const playChordOnce = useCallback(async (index: number) => {
         const instrument = await ensureInstrument();
         if (!instrument) return;
 
-        const notesToPlay = getVoicedChordNotes(chordSymbol);
+        const notesToPlay = voicings[index] ?? [];
         if (notesToPlay.length === 0) {
             onActiveNotesChange([]);
             return;
@@ -107,7 +110,7 @@ export default function MobileProgressionCard({
             releaseSinglePlay(instrument);
             onActiveNotesChange([]);
         }, noteDuration * 1000);
-    }, [ensureInstrument, releaseSinglePlay, onActiveNotesChange]);
+    }, [ensureInstrument, releaseSinglePlay, onActiveNotesChange, voicings]);
 
     const pauseProgression = useCallback(() => {
         if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
@@ -139,7 +142,7 @@ export default function MobileProgressionCard({
         const instrument = pianoRef.current;
         if (chordSymbol && instrument) {
             setPlayingIndex(index);
-            const newNotes = getVoicedChordNotes(chordSymbol);
+            const newNotes = voicings[index] ?? [];
 
             if (newNotes.length > 0) {
                 if (heldNotesRef.current.length > 0) {
@@ -156,7 +159,7 @@ export default function MobileProgressionCard({
         } else {
             pauseProgression();
         }
-    }, [initialChords, pauseProgression, onActiveNotesChange]);
+    }, [initialChords, voicings, pauseProgression, onActiveNotesChange]);
     useEffect(() => {
         playNextChordRef.current = playNextChord;
     }, [playNextChord]);
@@ -298,7 +301,7 @@ export default function MobileProgressionCard({
                                 {initialChords.map((chord, index) => (
                                     <button
                                         key={`${id}-mobile-${index}`}
-                                        onClick={() => playChordOnce(chord)}
+                                        onClick={() => playChordOnce(index)}
                                         className={cn(
                                             "flex items-center justify-center px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-black transition-all duration-150 active:scale-95 min-w-[64px]",
                                             playingIndex === index && "ring-2 ring-blue-600 dark:ring-blue-500 ring-offset-1 ring-offset-background dark:ring-offset-black"
