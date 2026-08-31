@@ -18,7 +18,7 @@ export default function PianoKeyboard({
                                           activeNotes,
                                           width = 400,
                                       }: PianoKeyboardProps) {
-    const { piano, areSamplesLoaded } = usePiano();
+    const { piano, areSamplesLoaded, loadSamples, resumeAudio } = usePiano();
     const [isMobile, setIsMobile] = useState(false);
 
     useEffect(() => {
@@ -33,12 +33,18 @@ export default function PianoKeyboard({
     const responsiveWidth = isMobile ? Math.min(window.innerWidth * 0.7, 180) : width;
 
     const handlePlayNote = (midiNumber: number) => {
-        if (piano && areSamplesLoaded) { // Check if piano instance exists and samples are loaded
-            const note = MidiNumbers.getAttributes(midiNumber).note;
-            piano.triggerAttack(note);
-        } else {
-            // console.log("Piano not ready or samples not loaded for individual note play.");
+        // Pressing a key is a user gesture — the one moment a browser will let
+        // the audio context start. react-piano calls this synchronously, so
+        // this is fire-and-forget: if the context was still suspended, this
+        // press is silent and the next one sounds.
+        void resumeAudio();
+
+        if (!piano || !areSamplesLoaded) {
+            void loadSamples({ retry: true });
+            return;
         }
+        const note = MidiNumbers.getAttributes(midiNumber).note;
+        piano.triggerAttack(note);
     };
 
     const handleStopNote = (midiNumber: number) => {

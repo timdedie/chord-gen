@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { MidiNumbers } from "react-piano";
 import dynamic from "next/dynamic";
 import { Heart } from "lucide-react";
@@ -17,13 +17,18 @@ const ChordColumnsContainer = dynamic(
 
 export default function SavedPage() {
     const { saved, isSaved, toggleSave, isLoading, isSignedIn } = useSavedProgressions();
-    const { loadSamples, areSamplesLoaded, isLoadingSamples } = usePiano();
+    const { loadSamples } = usePiano();
     const [activeNotes, setActiveNotes] = useState<string[]>([]);
+
+    // Fetching the samples needs no user gesture; resuming the AudioContext
+    // does, and that happens in the click handler that plays a chord.
+    useEffect(() => {
+        loadSamples();
+    }, [loadSamples]);
 
     const handleActiveNotesChange = useCallback((notes: string[]) => {
         setActiveNotes(notes);
-        if (!areSamplesLoaded && !isLoadingSamples) loadSamples();
-    }, [areSamplesLoaded, isLoadingSamples, loadSamples]);
+    }, []);
 
     const firstNote = MidiNumbers.fromNote("C3");
     const lastNote = MidiNumbers.fromNote("C5");

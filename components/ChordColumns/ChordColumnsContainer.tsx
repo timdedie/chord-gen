@@ -19,7 +19,7 @@ import { ChordItem } from "@/hooks/useChordManagement";
 import type { GenerationRound } from "@/lib/prompts/history";
 import { ColumnsSkeleton } from "./ProgressionSkeleton";
 import { Chord } from "tonal";
-import { now as toneNow } from "tone";
+import { now as toneNow, type Sampler } from "tone";
 import { usePiano } from "@/components/PianoProvider";
 import { getVoicedChordNotes } from "@/lib/chordUtils";
 import { generateChordColors } from "@/lib/chordColors";
@@ -131,8 +131,14 @@ export default function ChordColumnsContainer({
   const [editFeedback, setEditFeedback] = useState("");
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
-  const { piano, areSamplesLoaded, loadSamples, isLoadingSamples } =
-    usePiano();
+  const { piano, loadSamples, resumeAudio } = usePiano();
+  // Playback reads the sampler through a ref so a chord clicked during the very
+  // first load can sound immediately — the `piano` state that `loadSamples`
+  // sets is still stale inside the handler that awaited it.
+  const pianoRef = useRef<Sampler | null>(piano);
+  useEffect(() => {
+    pianoRef.current = piano;
+  }, [piano]);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -155,13 +161,45 @@ export default function ChordColumnsContainer({
   /** Notes still sounding from the last single-chord play. */
   const singlePlayNotesRef = useRef<string[]>([]);
 
+  /**
+   * The loaded sampler, waiting on the samples if this is the first play.
+   *
+   * Only ever called from a click: resuming the AudioContext is the one thing a
+   * browser will not do outside a user gesture, and a blocked resume never
+   * settles, so it cannot be moved into the page's mount effect.
+   */
+  const ensureInstrument = useCallback(async () => {
+    await resumeAudio();
+    const instrument = pianoRef.current ?? (await loadSamples({ retry: true }));
+    if (instrument) pianoRef.current = instrument;
+    return instrument;
+  }, [loadSamples, resumeAudio]);
+
+  /**
+   * Stop whatever the last single-chord click started.
+   *
+   * `triggerAttackRelease` cannot do this: Sampler drops a note from its
+   * active-source map the moment the release is *scheduled*, not when the sound
+   * stops, so a later `triggerRelease` finds nothing to stop. Repeat clicks then
+   * layer identical samples at identical pitches, which sum in amplitude — two
+   * copies is about +6dB — so the chord phases and then clips. Attacking and
+   * releasing by hand keeps the notes releasable for as long as they ring.
+   */
+  const releaseSinglePlay = useCallback((instrument: Sampler) => {
+    if (singlePlayTimeoutRef.current) {
+      clearTimeout(singlePlayTimeoutRef.current);
+      singlePlayTimeoutRef.current = null;
+    }
+    if (singlePlayNotesRef.current.length > 0) {
+      instrument.triggerRelease(singlePlayNotesRef.current, toneNow());
+      singlePlayNotesRef.current = [];
+    }
+  }, []);
+
   const playChordOnce = useCallback(
     async (chordSymbol: string, chordId?: string) => {
-      if (!areSamplesLoaded) {
-        if (!isLoadingSamples) await loadSamples();
-        return;
-      }
-      if (!piano) return;
+      const instrument = await ensureInstrument();
+      if (!instrument) return;
       onChordPlay?.(chordSymbol);
 
       const notesToPlay = getVoicedChordNotes(chordSymbol);
@@ -173,45 +211,50 @@ export default function ChordColumnsContainer({
       const noteDuration = 0.8;
       onActiveNotesChange(notesToPlay);
 
-      // The sampler has a 1s release tail, so a chord keeps sounding for well
-      // over a second after it is triggered. Releasing the previous copy first
-      // makes a repeat retrigger the chord the way a piano key does — without
-      // it, identical samples at identical pitches stack and sum in amplitude,
-      // so playing one chord repeatedly makes it phase and then clip.
-      const startTime = toneNow();
-      if (singlePlayNotesRef.current.length > 0) {
-        piano.triggerRelease(singlePlayNotesRef.current, startTime);
-      }
-      // A hair after the release, so the two don't land on the same instant and click.
-      piano.triggerAttackRelease(notesToPlay, noteDuration, startTime + 0.01);
+      // The previous copy goes first, so a repeat retriggers the chord the way
+      // a piano key does rather than stacking on top of its own release tail.
+      releaseSinglePlay(instrument);
+      // A hair later, so the release and the attack don't land on the same
+      // instant and click.
+      instrument.triggerAttack(notesToPlay, toneNow() + 0.01);
       singlePlayNotesRef.current = notesToPlay;
 
-      if (chordId && !isPlaying) {
-        if (singlePlayTimeoutRef.current) clearTimeout(singlePlayTimeoutRef.current);
-        setPlayingChordId(chordId);
-        singlePlayTimeoutRef.current = setTimeout(() => {
-          setPlayingChordId((prev) => (prev === chordId ? null : prev));
-        }, noteDuration * 1000);
-      }
+      const wasProgressionPlaying = isPlaying;
+      if (chordId && !wasProgressionPlaying) setPlayingChordId(chordId);
 
-      setTimeout(() => onActiveNotesChange([]), noteDuration * 1000);
+      singlePlayTimeoutRef.current = setTimeout(() => {
+        singlePlayTimeoutRef.current = null;
+        releaseSinglePlay(instrument);
+        // The running progression owns the keyboard and the pressed column
+        // while it plays; a chord clicked alongside it clears neither.
+        if (wasProgressionPlaying) return;
+        onActiveNotesChange([]);
+        if (chordId) setPlayingChordId((prev) => (prev === chordId ? null : prev));
+      }, noteDuration * 1000);
     },
-    [piano, areSamplesLoaded, isLoadingSamples, loadSamples, onActiveNotesChange, onChordPlay, isPlaying]
+    [ensureInstrument, releaseSinglePlay, onActiveNotesChange, onChordPlay, isPlaying]
   );
 
   const pauseProgression = useCallback(() => {
     if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
     playbackTimeoutRef.current = null;
 
-    if (piano && heldNotesRef.current.length > 0) {
-      piano.triggerRelease(heldNotesRef.current, toneNow());
-      heldNotesRef.current = [];
+    const instrument = pianoRef.current;
+    if (instrument) {
+      if (heldNotesRef.current.length > 0) {
+        instrument.triggerRelease(heldNotesRef.current, toneNow());
+        heldNotesRef.current = [];
+      }
+      // A chord clicked just before hitting play would otherwise still be
+      // ringing under the progression, and its pending release would stop
+      // whichever progression notes happen to share its pitches.
+      releaseSinglePlay(instrument);
     }
 
     setIsPlaying(false);
     setPlayingChordId(null);
     onActiveNotesChange([]);
-  }, [piano, onActiveNotesChange]);
+  }, [releaseSinglePlay, onActiveNotesChange]);
 
   const playNextChordRef = useRef<(index: number) => void>(() => {});
 
@@ -223,15 +266,16 @@ export default function ChordColumnsContainer({
       }
 
       const chordToPlay = chords[index];
-      if (chordToPlay && piano) {
+      const instrument = pianoRef.current;
+      if (chordToPlay && instrument) {
         setPlayingChordId(chordToPlay.id);
         const newNotes = getVoicedChordNotes(chordToPlay.chord);
 
         if (newNotes.length > 0) {
           if (heldNotesRef.current.length > 0) {
-            piano.triggerRelease(heldNotesRef.current, toneNow());
+            instrument.triggerRelease(heldNotesRef.current, toneNow());
           }
-          piano.triggerAttack(newNotes, toneNow());
+          instrument.triggerAttack(newNotes, toneNow());
           heldNotesRef.current = newNotes;
           onActiveNotesChange(newNotes);
         }
@@ -243,7 +287,7 @@ export default function ChordColumnsContainer({
         pauseProgression();
       }
     },
-    [chords, piano, pauseProgression, onActiveNotesChange]
+    [chords, pauseProgression, onActiveNotesChange]
   );
   useEffect(() => {
     playNextChordRef.current = playNextChord;
@@ -252,24 +296,13 @@ export default function ChordColumnsContainer({
   const handleTogglePlayPause = useCallback(async () => {
     if (isPlaying) {
       pauseProgression();
-    } else {
-      if (chords.length === 0) return;
-      if (!areSamplesLoaded) {
-        if (!isLoadingSamples) await loadSamples();
-        return;
-      }
-      setIsPlaying(true);
-      playNextChord(0);
+      return;
     }
-  }, [
-    isPlaying,
-    pauseProgression,
-    playNextChord,
-    chords,
-    areSamplesLoaded,
-    isLoadingSamples,
-    loadSamples,
-  ]);
+    if (chords.length === 0) return;
+    if (!(await ensureInstrument())) return;
+    setIsPlaying(true);
+    playNextChord(0);
+  }, [isPlaying, pauseProgression, playNextChord, chords, ensureInstrument]);
 
   // Stop playback when chords change (syncs Tone.js playback to the chords prop)
   useEffect(() => {

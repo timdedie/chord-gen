@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Pause, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ChordSymbol from "@/components/ChordSymbol";
-import { now as toneNow } from "tone";
+import { now as toneNow, type Sampler } from "tone";
 import { usePiano } from "@/components/PianoProvider";
 import { getVoicedChordNotes } from "@/lib/chordUtils";
 import dynamic from "next/dynamic";
@@ -49,15 +49,45 @@ export default function MobileProgressionCard({
     const explanationAbortControllerRef = useRef<AbortController | null>(null);
     const currentProgressionKeyRef = useRef<string>("");
 
-    const { piano, areSamplesLoaded, loadSamples, isLoadingSamples } = usePiano();
+    const { piano, loadSamples, resumeAudio } = usePiano();
     const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const heldNotesRef = useRef<string[]>([]);
     /** Notes still sounding from the last single-chord play. */
     const singlePlayNotesRef = useRef<string[]>([]);
+    const singlePlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const CHORD_PLAYBACK_INTERVAL = 1200;
 
-    const playChordOnce = useCallback((chordSymbol: string) => {
-        if (!piano || !areSamplesLoaded) return;
+    // Playback reads the sampler through a ref so a chord tapped during the
+    // very first load can sound immediately — the `piano` state that
+    // `loadSamples` sets is still stale inside the handler that awaited it.
+    const pianoRef = useRef<Sampler | null>(piano);
+    useEffect(() => {
+        pianoRef.current = piano;
+    }, [piano]);
+
+    /** See ChordColumnsContainer — only ever called from a tap. */
+    const ensureInstrument = useCallback(async () => {
+        await resumeAudio();
+        const instrument = pianoRef.current ?? (await loadSamples({ retry: true }));
+        if (instrument) pianoRef.current = instrument;
+        return instrument;
+    }, [loadSamples, resumeAudio]);
+
+    /** See ChordColumnsContainer — `triggerAttackRelease` can't be released. */
+    const releaseSinglePlay = useCallback((instrument: Sampler) => {
+        if (singlePlayTimeoutRef.current) {
+            clearTimeout(singlePlayTimeoutRef.current);
+            singlePlayTimeoutRef.current = null;
+        }
+        if (singlePlayNotesRef.current.length > 0) {
+            instrument.triggerRelease(singlePlayNotesRef.current, toneNow());
+            singlePlayNotesRef.current = [];
+        }
+    }, []);
+
+    const playChordOnce = useCallback(async (chordSymbol: string) => {
+        const instrument = await ensureInstrument();
+        if (!instrument) return;
 
         const notesToPlay = getVoicedChordNotes(chordSymbol);
         if (notesToPlay.length === 0) {
@@ -68,32 +98,34 @@ export default function MobileProgressionCard({
         const noteDuration = 0.8;
         onActiveNotesChange(notesToPlay);
 
-        // See ChordColumnsContainer: the sampler's release tail keeps a chord
-        // sounding, so the previous copy is released before retriggering rather
-        // than left to stack and sum in amplitude.
-        const startTime = toneNow();
-        if (singlePlayNotesRef.current.length > 0) {
-            piano.triggerRelease(singlePlayNotesRef.current, startTime);
-        }
-        piano.triggerAttackRelease(notesToPlay, noteDuration, startTime + 0.01);
+        releaseSinglePlay(instrument);
+        instrument.triggerAttack(notesToPlay, toneNow() + 0.01);
         singlePlayNotesRef.current = notesToPlay;
 
-        setTimeout(() => onActiveNotesChange([]), noteDuration * 1000);
-    }, [piano, areSamplesLoaded, onActiveNotesChange]);
+        singlePlayTimeoutRef.current = setTimeout(() => {
+            singlePlayTimeoutRef.current = null;
+            releaseSinglePlay(instrument);
+            onActiveNotesChange([]);
+        }, noteDuration * 1000);
+    }, [ensureInstrument, releaseSinglePlay, onActiveNotesChange]);
 
     const pauseProgression = useCallback(() => {
         if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
         playbackTimeoutRef.current = null;
 
-        if (piano && heldNotesRef.current.length > 0) {
-            piano.triggerRelease(heldNotesRef.current, toneNow());
-            heldNotesRef.current = [];
+        const instrument = pianoRef.current;
+        if (instrument) {
+            if (heldNotesRef.current.length > 0) {
+                instrument.triggerRelease(heldNotesRef.current, toneNow());
+                heldNotesRef.current = [];
+            }
+            releaseSinglePlay(instrument);
         }
 
         setIsPlaying(false);
         setPlayingIndex(null);
         onActiveNotesChange([]);
-    }, [piano, onActiveNotesChange]);
+    }, [releaseSinglePlay, onActiveNotesChange]);
 
     const playNextChordRef = useRef<(index: number) => void>(() => {});
 
@@ -104,15 +136,16 @@ export default function MobileProgressionCard({
         }
 
         const chordSymbol = initialChords[index];
-        if (chordSymbol && piano) {
+        const instrument = pianoRef.current;
+        if (chordSymbol && instrument) {
             setPlayingIndex(index);
             const newNotes = getVoicedChordNotes(chordSymbol);
 
             if (newNotes.length > 0) {
                 if (heldNotesRef.current.length > 0) {
-                    piano.triggerRelease(heldNotesRef.current, toneNow());
+                    instrument.triggerRelease(heldNotesRef.current, toneNow());
                 }
-                piano.triggerAttack(newNotes, toneNow());
+                instrument.triggerAttack(newNotes, toneNow());
                 heldNotesRef.current = newNotes;
                 onActiveNotesChange(newNotes);
             }
@@ -123,24 +156,21 @@ export default function MobileProgressionCard({
         } else {
             pauseProgression();
         }
-    }, [initialChords, piano, pauseProgression, onActiveNotesChange]);
+    }, [initialChords, pauseProgression, onActiveNotesChange]);
     useEffect(() => {
         playNextChordRef.current = playNextChord;
     }, [playNextChord]);
 
-    const handleTogglePlayPause = useCallback(() => {
+    const handleTogglePlayPause = useCallback(async () => {
         if (isPlaying) {
             pauseProgression();
-        } else {
-            if (initialChords.length === 0) return;
-            if (!areSamplesLoaded) {
-                if (!isLoadingSamples) loadSamples();
-                return;
-            }
-            setIsPlaying(true);
-            playNextChord(0);
+            return;
         }
-    }, [isPlaying, pauseProgression, playNextChord, initialChords, areSamplesLoaded, isLoadingSamples, loadSamples]);
+        if (initialChords.length === 0) return;
+        if (!(await ensureInstrument())) return;
+        setIsPlaying(true);
+        playNextChord(0);
+    }, [isPlaying, pauseProgression, playNextChord, initialChords, ensureInstrument]);
 
     // Explanation functionality
     const fetchAndStreamExplanation = async (progressionKey: string) => {

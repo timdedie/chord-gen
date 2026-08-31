@@ -12,7 +12,7 @@ import { usePiano } from "@/components/PianoProvider";
 export default function AppPage() {
     const router = useRouter();
     const { randomExamples } = useExamplePrompts();
-    const { loadSamples, areSamplesLoaded, isLoadingSamples } = usePiano();
+    const { loadSamples, resumeAudio } = usePiano();
     const premium = usePremiumGeneration();
 
     const [prompt, setPrompt] = useState("");
@@ -22,7 +22,11 @@ export default function AppPage() {
     const handleGenerate = useCallback(() => {
         if (!prompt.trim()) return;
 
-        if (!areSamplesLoaded && !isLoadingSamples) loadSamples();
+        // Start the audio here, while we still have the click: the results page
+        // is reached by a client-side navigation, so the context resumed now
+        // carries over to it.
+        void resumeAudio();
+        void loadSamples();
 
         setIsNavigating(true);
 
@@ -31,10 +35,11 @@ export default function AppPage() {
         params.set("n", String(numChords));
         if (premium.enabled) params.set("premium", "1");
         router.push(`/app/results?${params.toString()}`);
-    }, [prompt, numChords, router, areSamplesLoaded, isLoadingSamples, loadSamples, premium.enabled]);
+    }, [prompt, numChords, router, loadSamples, resumeAudio, premium.enabled]);
 
     const handleExampleClick = useCallback((example: string) => {
-        if (!areSamplesLoaded && !isLoadingSamples) loadSamples();
+        void resumeAudio();
+        void loadSamples();
 
         setIsNavigating(true);
 
@@ -42,7 +47,7 @@ export default function AppPage() {
         params.set("q", example);
         params.set("n", String(numChords));
         router.push(`/app/results?${params.toString()}`);
-    }, [numChords, router, areSamplesLoaded, isLoadingSamples, loadSamples]);
+    }, [numChords, router, loadSamples, resumeAudio]);
 
     const handleNumChordsChange = useCallback((value: number) => {
         setNumChords(value);

@@ -38,7 +38,7 @@ interface RoundData {
 function ResultsContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { loadSamples, areSamplesLoaded, isLoadingSamples } = usePiano();
+    const { loadSamples } = usePiano();
     const { isSaved, toggleSave, isSignedIn: isSavedSignedIn } = useSavedProgressions();
     const premium = usePremiumGeneration();
     const { consume: consumePremium, refresh: refreshPremium } = premium;
@@ -66,12 +66,14 @@ function ResultsContent() {
         })), [rounds]);
     const hasFeedback = rounds.some((round) => !!round.feedback);
 
-    // Load samples on mount
+    // Fetch the samples on mount so the first chord click is instant. This does
+    // not touch the AudioContext's run state, so it works on a cold load of
+    // this URL — arriving straight from the landing page, or on a refresh —
+    // where there has been no user gesture yet. Resuming the context is the
+    // click handler's job, in ChordColumnsContainer.
     useEffect(() => {
-        if (!areSamplesLoaded && !isLoadingSamples) {
-            loadSamples();
-        }
-    }, [areSamplesLoaded, isLoadingSamples, loadSamples]);
+        loadSamples();
+    }, [loadSamples]);
 
     const generateProgressions = useCallback(async (queryPrompt: string, queryNumChords: number, usePremium: boolean = false) => {
         if (!queryPrompt.trim()) return;
@@ -84,11 +86,6 @@ function ResultsContent() {
             premium: usePremium,
             prompt_length: queryPrompt.length,
         });
-
-        // Load samples if not loaded
-        if (!areSamplesLoaded && !isLoadingSamples) {
-            loadSamples();
-        }
 
         try {
             const res = await fetch("/api/generate-multiple", {
@@ -136,7 +133,7 @@ function ResultsContent() {
         }
 
         setIsLoading(false);
-    }, [areSamplesLoaded, isLoadingSamples, loadSamples, consumePremium, refreshPremium]);
+    }, [consumePremium, refreshPremium]);
 
     // Load from URL params on mount
     useEffect(() => {
