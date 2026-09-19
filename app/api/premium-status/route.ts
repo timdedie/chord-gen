@@ -6,8 +6,6 @@ import { NextResponse } from "next/server";
 import { FREE_PREMIUM_GENERATIONS_PER_DAY, PRO_PREMIUM_GENERATIONS_PER_DAY } from "@/lib/ai/models";
 import { getUserRole } from "@/lib/premium";
 
-export const runtime = "edge";
-
 function todayDate(): string {
     return new Date().toISOString().slice(0, 10);
 }

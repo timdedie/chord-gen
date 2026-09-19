@@ -17,7 +17,6 @@ import { captureServer } from '@/lib/analytics/posthog-server';
 import { repairProgression } from '@/lib/ai/repair';
 import { cacheKey, readCache, writeCache } from '@/lib/ai/cache';
 
-export const runtime = 'edge';
 export const maxDuration = 25;
 
 interface RequestBody {
