@@ -160,7 +160,6 @@ export function useChordManagement(props?: UseChordManagementProps) {
 
     const generateChords = useCallback(async (params: GenerationParams) => {
         const { numChords, customPrompt } = params;
-        console.log("useChordManagement: generateChords called. Params:", params, "Current prompt state (hook):", prompt);
 
         let usedPrompt: string;
         if (typeof customPrompt === 'string') {
