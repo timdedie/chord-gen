@@ -1,7 +1,7 @@
 // DeepSeek doesn't support native JSON schema; SDK falls back to system message injection — expected.
 (globalThis as Record<string, unknown>).AI_SDK_LOG_WARNINGS = false;
 
-import { generateObject, type ModelMessage } from "ai";
+import { generateObject, NoObjectGeneratedError, TypeValidationError, type ModelMessage } from "ai";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -92,25 +92,38 @@ interface GenerateOptions<TSchema extends z.ZodTypeAny> {
     schema: TSchema;
     temperature?: number;
     tier?: Tier;
-    /**
-     * A last chance to rescue a response the schema rejected — for example by
-     * dropping the one malformed progression out of three and returning the
-     * rest. Returning null means the attempt genuinely failed.
-     */
-    salvage?: (raw: unknown) => z.infer<TSchema> | null;
 }
 
 /** How many times to re-ask the model after a response fails validation. */
 const MAX_RETRIES = 1;
 
 /**
- * Run one structured generation, walking the model fallback chain.
+ * The JSON a model produced when the SDK rejected it for failing the schema,
+ * or undefined for any other failure.
+ *
+ * `generateObject` validates against the schema itself and throws rather than
+ * returning an invalid object, so without this the retry-with-errors path
+ * below never ran: every validation failure was treated like a provider outage.
+ */
+function rejectedOutput(error: unknown): unknown {
+    if (!NoObjectGeneratedError.isInstance(error)) return undefined;
+    if (!TypeValidationError.isInstance(error.cause) || !error.text) return undefined;
+    try {
+        return JSON.parse(error.text);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Run one structured generation.
  *
  * Chord symbols are repaired deterministically inside the schema before
  * validation runs (see `lib/ai/repair.ts`), so the common near-miss spellings
- * no longer reach this loop at all. What is left is rare enough that a single
- * retry is worth more than the three full regenerations this used to do — and
- * `salvage` usually returns something useful before that retry is needed.
+ * never reach this loop. What does reach it — mostly voicings whose notes do
+ * not match their symbol — is logged, then sent back to the model with the
+ * reasons. Nothing is patched up or partially returned: a response that is
+ * still invalid after the retry fails the request, with every reason attached.
  */
 export async function generateStructured<TSchema extends z.ZodTypeAny>({
     task,
@@ -119,7 +132,6 @@ export async function generateStructured<TSchema extends z.ZodTypeAny>({
     schema,
     temperature = 1.0,
     tier = "standard",
-    salvage,
 }: GenerateOptions<TSchema>): Promise<z.infer<TSchema>> {
     const chain = modelChain(tier);
     const failures: Array<{ model: string; attempt: number; error: string }> = [];
@@ -135,34 +147,31 @@ export async function generateStructured<TSchema extends z.ZodTypeAny>({
                     system,
                     messages,
                     temperature,
-                    providerOptions: providerOptions(spec),
+                    providerOptions: providerOptions(),
                 });
-
-                const parsed = schema.safeParse(object);
-                if (parsed.success) return parsed.data;
-
-                const rescued = salvage?.(object);
-                if (rescued) {
-                    console.warn(`[ai:${task}] salvaged a partial response from ${spec.label}`);
-                    return rescued;
+                return object as z.infer<TSchema>;
+            } catch (error) {
+                const raw = rejectedOutput(error);
+                if (raw === undefined) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    failures.push({ model: spec.id, attempt: attempt + 1, error: message });
+                    // A provider-level failure will not improve on retry.
+                    break;
                 }
 
-                failures.push({
-                    model: spec.label,
-                    attempt: attempt + 1,
-                    error: JSON.stringify(parsed.error.format()),
-                });
+                const parsed = schema.safeParse(raw);
+                if (parsed.success) return parsed.data;
+
+                const reasons = parsed.error.issues.map((i) => i.message);
+                console.warn(
+                    `[ai:${task}] ${spec.id} attempt ${attempt + 1} rejected:\n  ${reasons.join("\n  ")}`,
+                );
+                failures.push({ model: spec.id, attempt: attempt + 1, error: reasons.join(" | ") });
 
                 messages.push(
-                    { role: "assistant", content: JSON.stringify(object) },
-                    { role: "user", content: buildValidationErrorMessage(parsed.error.format()) },
+                    { role: "assistant", content: JSON.stringify(raw) },
+                    { role: "user", content: buildValidationErrorMessage(parsed.error.issues) },
                 );
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                failures.push({ model: spec.label, attempt: attempt + 1, error: message });
-                // A provider-level failure will not improve on retry; move on
-                // to the next model in the chain instead of asking again.
-                break;
             }
         }
     }

@@ -5,9 +5,11 @@ import { aiRoute, AiRouteError, generateStructured } from '@/lib/ai/gateway';
 import { CHORD_GENERATION_SYSTEM_PROMPT } from '@/lib/prompts/system';
 import { buildReplaceChordMessage } from '@/lib/prompts/replace-chord';
 import { GenerationRound, normalizeHistory } from '@/lib/prompts/history';
+import { parseVoicedChords } from '@/lib/prompts/format';
 
 interface RequestBody {
-    chords?: string[];
+    /** The progression, each chord with its notes. */
+    chords?: unknown;
     /** Index of the chord to swap out, within `chords`. */
     index?: number;
     prompt?: string;
@@ -16,7 +18,8 @@ interface RequestBody {
 }
 
 export const POST = aiRoute<RequestBody>('replace-chord', async ({ body }) => {
-    const { chords = [], index, prompt } = body;
+    const { index, prompt } = body;
+    const chords = parseVoicedChords(body.chords);
 
     if (!chords.length) {
         throw new AiRouteError('Chords are required to replace a chord.', 400);
@@ -29,8 +32,8 @@ export const POST = aiRoute<RequestBody>('replace-chord', async ({ body }) => {
 
     return generateStructured({
         task: 'replace-chord',
-        userMessage: buildReplaceChordMessage(chords.map(String), index, prompt, history),
+        userMessage: buildReplaceChordMessage(chords, index, prompt, history),
         system: CHORD_GENERATION_SYSTEM_PROMPT,
-        schema: createAlternativeChordsSchema(chords[index]),
+        schema: createAlternativeChordsSchema(chords[index].symbol),
     });
 });

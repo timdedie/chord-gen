@@ -16,11 +16,13 @@ import ProgressionSkeleton from "@/components/ChordColumns/ProgressionSkeleton";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
+import { reportAiFailure } from "@/lib/ai/reportFailure";
 import { VOICED_RANGE } from "@/lib/progression/voicing";
+import type { VoicedChord } from "@/lib/progression/types";
 
 interface ProgressionData {
     id: string;
-    chords: string[];
+    chords: VoicedChord[];
     style: string;
 }
 
@@ -63,7 +65,7 @@ function ResultsContent() {
         .filter((round) => round.progressions.length > 0)
         .map((round) => ({
             feedback: round.feedback,
-            progressions: round.progressions.map((p) => ({ chords: p.chords, style: p.style })),
+            progressions: round.progressions.map((p) => ({ chords: p.chords.map((c) => c.symbol), style: p.style })),
         })), [rounds]);
     const hasFeedback = rounds.some((round) => !!round.feedback);
 
@@ -102,7 +104,7 @@ function ResultsContent() {
             const data = await res.json();
 
             if (!res.ok || data.error) {
-                console.error("Generation error:", data.error);
+                reportAiFailure("Generation", data);
                 capture(AnalyticsEvent.GenerationFailed, {
                     status: res.status,
                     error: data.error ?? "unknown",
@@ -191,7 +193,7 @@ function ResultsContent() {
             const data = await res.json();
 
             if (!res.ok || data.error) {
-                console.error("Generate more error:", data.error);
+                reportAiFailure("Generation", data);
                 capture(AnalyticsEvent.GenerationFailed, {
                     status: res.status,
                     error: data.error ?? "unknown",
@@ -268,8 +270,8 @@ function ResultsContent() {
         setActiveNotes(notes);
     }, []);
 
-    // Sized from the voicing engine rather than restated here, so the two
-    // cannot drift apart — see VOICED_RANGE.
+    // Sized from the range voicings are validated against, so the two cannot
+    // drift apart — see VOICED_RANGE.
     const firstNote = MidiNumbers.fromNote(VOICED_RANGE.low);
     const lastNote = MidiNumbers.fromNote(VOICED_RANGE.high);
 

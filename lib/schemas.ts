@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MAX_CHORDS, MIN_CHORDS } from './prompts/chordCount';
 import { repairChordSymbol } from './ai/repair';
+import { MAX_VOICING_NOTES, MIN_VOICING_NOTES, VOICED_RANGE, validateVoicing } from './progression/voicing';
 
 /**
  * Validates a chord symbol, repairing it first.
@@ -26,11 +27,36 @@ export const ValidChordStringSchema = z.string()
         return repaired;
     });
 
+const voicedChordShape = {
+    symbol: ValidChordStringSchema,
+    notes: z.array(z.string())
+        .describe(`The exact notes to play, lowest first, in scientific pitch notation (C4 = middle C) — e.g. ["D2", "C4", "E4", "F4", "A4"]. The first note is the bass. ${MIN_VOICING_NOTES}-${MAX_VOICING_NOTES} notes between ${VOICED_RANGE.low} and ${VOICED_RANGE.high}.`),
+};
+
+/**
+ * Checks the notes against the (already repaired) symbol and swaps in their
+ * canonical, ascending spelling. Runs after the symbol has parsed, so a bad
+ * symbol is reported once rather than again as a voicing problem.
+ */
+function withValidVoicing<T extends { symbol: string; notes: string[] }>(chord: T, ctx: z.RefinementCtx): T {
+    const result = validateVoicing(chord.symbol, chord.notes);
+    if (!result.ok) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error, path: ['notes'] });
+        return z.NEVER;
+    }
+    return { ...chord, notes: result.notes };
+}
+
+/** A chord symbol together with the exact notes that voice it. */
+export const VoicedChordSchema = z.object(voicedChordShape)
+    .transform(withValidVoicing)
+    .describe('One chord: its symbol and the exact notes that voice it.');
+
 /**
  * Schema factories — enforce exact chord count at the schema level.
  */
 export const createProgressionSchema = (numChords: number) => z.object({
-    chords: z.array(ValidChordStringSchema)
+    chords: z.array(VoicedChordSchema)
         .length(numChords)
         .describe(`A ${numChords}-chord progression.`),
 });
@@ -47,11 +73,11 @@ export const createMultipleProgressionsSchema = (
 ) => z.object({
     progressions: z.array(z.object({
         chords: allowLengthChange
-            ? z.array(ValidChordStringSchema)
+            ? z.array(VoicedChordSchema)
                 .min(MIN_CHORDS)
                 .max(MAX_CHORDS)
                 .describe(`A chord progression — ${numChords} chords unless the user's feedback asks for a different length (${MIN_CHORDS}-${MAX_CHORDS}).`)
-            : z.array(ValidChordStringSchema)
+            : z.array(VoicedChordSchema)
                 .length(numChords)
                 .describe(`A ${numChords}-chord progression.`),
         style: z.string()
@@ -62,7 +88,7 @@ export const createMultipleProgressionsSchema = (
 });
 
 export const EditProgressionSchema = z.object({
-    chords: z.array(ValidChordStringSchema)
+    chords: z.array(VoicedChordSchema)
         .min(MIN_CHORDS)
         .max(MAX_CHORDS)
         .describe("The revised chord progression, incorporating the user's requested changes."),
@@ -79,30 +105,26 @@ export const createAlternativeChordsSchema = (originalChord: string) => {
 
     return z.object({
         alternatives: z.array(z.object({
-            chord: ValidChordStringSchema.describe("A substitute chord symbol (e.g. Am7, F/A)"),
+            ...voicedChordShape,
             label: z.string()
                 .describe("A 1-2 word description of the character this swap brings (e.g. 'Brighter', 'Jazzier', 'More tension')"),
-        }))
+        }).transform(withValidVoicing))
             .length(3)
             .describe('3 distinct alternatives for the chord being replaced.')
             .refine(
-                (alts) => alts.every((a) => normalize(a.chord) !== original),
+                (alts) => alts.every((a) => normalize(a.symbol) !== original),
                 { message: `Each alternative must differ from the original chord (${originalChord}).` },
             )
             .refine(
-                (alts) => new Set(alts.map((a) => normalize(a.chord))).size === alts.length,
+                (alts) => new Set(alts.map((a) => normalize(a.symbol))).size === alts.length,
                 { message: 'The three alternatives must all be different from each other.' },
             ),
     });
 };
 
-export const SingleChordSchema = z.object({
-    chord: ValidChordStringSchema.describe("A single chord symbol (e.g. F#m7)"),
-});
-
 /**
  * Type definitions
  */
 export type ValidChordString = z.infer<typeof ValidChordStringSchema>;
-export type SingleChord = z.infer<typeof SingleChordSchema>;
+export type VoicedChordOutput = z.infer<typeof VoicedChordSchema>;
 export type AlternativeChord = z.infer<ReturnType<typeof createAlternativeChordsSchema>>['alternatives'][number];

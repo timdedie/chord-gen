@@ -1,8 +1,6 @@
+import type { VoicedChord } from '@/lib/progression/types';
 import { type GenerationRound, collectFeedback, formatRounds } from './history';
-
-export interface SimpleChordObject {
-    chord: string;
-}
+import { formatVoicedProgression } from './format';
 
 export function buildProgressionMessage(prompt: string, numChords: number): string {
     return `
@@ -14,7 +12,9 @@ Consider as options (not obligations):
 - Slash chords for stepwise bass movement
 - Modal interchange or secondary dominants for color
 - Diminished or half-diminished passing chords
-- A mix of simple and rich voicings — not all triads, not all extensions
+- A mix of simple and rich chords — not all triads, not all extensions
+
+Voice the chords as one progression: each chord's notes should lead smoothly out of the one before.
 
 If the prompt is simple (e.g. "happy pop"), lean simpler but still avoid the obvious. If it suggests complexity (e.g. "dark jazz"), be more adventurous.
   `.trim();
@@ -44,28 +44,28 @@ ${notesLine}`;
 
 export function buildAddChordMessage(
     prompt: string | undefined,
-    existingChords: SimpleChordObject[],
+    existingChords: VoicedChord[],
     addChordPosition: number,
     history: GenerationRound[] = []
 ): string {
     const hasExisting = existingChords.length > 0;
 
     const before = hasExisting && addChordPosition > 0
-        ? existingChords[addChordPosition - 1].chord
+        ? existingChords[addChordPosition - 1].symbol
         : null;
     const after = hasExisting && addChordPosition < existingChords.length
-        ? existingChords[addChordPosition].chord
+        ? existingChords[addChordPosition].symbol
         : null;
 
     let context: string;
     if (hasExisting) {
-        const progressionStr = existingChords.map(c => c.chord).join(' - ');
+        const progressionStr = formatVoicedProgression(existingChords);
         const position = before && after
             ? `between ${before} and ${after}`
             : before
                 ? `after ${before} (at the end)`
                 : `before ${after} (at the start)`;
-        context = `Progression: ${progressionStr}\nInsert a new chord ${position}.`;
+        context = `Progression (each chord's notes in brackets, lowest first): ${progressionStr}\nInsert a new chord ${position}. Voice it so its notes connect smoothly to the voicings on either side — keep common tones and move the other voices by step.`;
     } else {
         context = 'Generate an interesting single starting chord — a strong, clear chord that invites continuation.';
     }

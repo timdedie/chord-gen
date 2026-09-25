@@ -21,8 +21,10 @@ import { ColumnsSkeleton } from "./ProgressionSkeleton";
 import { Chord } from "tonal";
 import { now as toneNow, type Sampler } from "tone";
 import { usePiano } from "@/components/PianoProvider";
-import { voiceProgressionNotes } from "@/lib/chordUtils";
+import { docFromChords } from "@/lib/progression/doc";
+import type { VoicedChord } from "@/lib/progression/types";
 import { generateChordColors } from "@/lib/chordColors";
+import { reportAiFailure } from "@/lib/ai/reportFailure";
 import { useTheme } from "next-themes";
 import ChordColumn from "./ChordColumn";
 import type { ChordAlternative } from "./ChordAlternatives";
@@ -36,13 +38,14 @@ const EMPTY_CHORDS: ChordItem[] = [];
 
 interface ChordColumnsContainerProps {
   id: string;
-  initialChords: string[];
+  /** Each chord with the notes the model voiced it with. */
+  initialChords: VoicedChord[];
   style: string;
   prompt: string;
   onActiveNotesChange: (notes: string[]) => void;
   onChordPlay?: (chord: string) => void;
   isSaved?: (id: string) => boolean;
-  onToggleSave?: (id: string, chords: string[]) => void;
+  onToggleSave?: (id: string, chords: VoicedChord[]) => void;
   isSignedIn?: boolean;
   /**
    * Everything generated in this session so far, with the feedback that drove
@@ -70,7 +73,8 @@ export default function ChordColumnsContainer({
   const [iterations, setIterations] = useState<ChordItem[][]>(() => [
     initialChords.map((chord, index) => ({
       id: `${id}-chord-${index}-${generateUniqueId()}`,
-      chord,
+      chord: chord.symbol,
+      notes: chord.notes,
     })),
   ]);
   const [currentIteration, setCurrentIteration] = useState(0);
@@ -150,16 +154,17 @@ export default function ChordColumnsContainer({
   const CHORD_PLAYBACK_INTERVAL = 1200;
 
   /**
-   * Every chord's notes, voiced as one progression.
-   *
-   * Voicing is progression-level — each chord is placed to move least from the
-   * one before it — so it cannot be computed inside the play handlers a chord
-   * at a time. Recomputed whenever the strip changes, which is also what keeps
-   * a clicked chord sounding the same as it does mid-playback.
+   * The strip as the API and the save/export paths take it. Every chord
+   * carries the notes the model voiced it with, so a clicked chord, the
+   * run-through and the MIDI file all sound the same.
    */
-  const voicings = useMemo(
-    () => voiceProgressionNotes(chords.map((c) => c.chord)),
+  const voicedChords = useMemo<VoicedChord[]>(
+    () => chords.map((c) => ({ symbol: c.chord, notes: c.notes })),
     [chords]
+  );
+  const exportDoc = useMemo(
+    () => docFromChords(voicedChords.filter((c) => c.notes.length > 0), { prompt, style }),
+    [voicedChords, prompt, style]
   );
 
   // Generate colors based on current chords
@@ -210,15 +215,11 @@ export default function ChordColumnsContainer({
   }, []);
 
   const playChordOnce = useCallback(
-    async (chordSymbol: string, chordId?: string) => {
+    async (chordSymbol: string, notesToPlay: string[], chordId?: string) => {
       const instrument = await ensureInstrument();
       if (!instrument) return;
       onChordPlay?.(chordSymbol);
 
-      // Play the chord as it sits in this progression, not in isolation, so a
-      // single click and the full run-through sound identical.
-      const index = chords.findIndex((c) => c.id === chordId);
-      const notesToPlay = voicings[index] ?? [];
       if (notesToPlay.length === 0) {
         onActiveNotesChange([]);
         return;
@@ -254,8 +255,6 @@ export default function ChordColumnsContainer({
       onActiveNotesChange,
       onChordPlay,
       isPlaying,
-      chords,
-      voicings,
     ]
   );
 
@@ -293,7 +292,7 @@ export default function ChordColumnsContainer({
       const instrument = pianoRef.current;
       if (chordToPlay && instrument) {
         setPlayingChordId(chordToPlay.id);
-        const newNotes = voicings[index] ?? [];
+        const newNotes = chordToPlay.notes;
 
         if (newNotes.length > 0) {
           if (heldNotesRef.current.length > 0) {
@@ -311,7 +310,7 @@ export default function ChordColumnsContainer({
         pauseProgression();
       }
     },
-    [chords, voicings, pauseProgression, onActiveNotesChange]
+    [chords, pauseProgression, onActiveNotesChange]
   );
   useEffect(() => {
     playNextChordRef.current = playNextChord;
@@ -392,7 +391,7 @@ export default function ChordColumnsContainer({
       if (chords.length >= 8) return;
 
       const newChordId = generateUniqueId();
-      const placeholderChord: ChordItem = { id: newChordId, chord: "" };
+      const placeholderChord: ChordItem = { id: newChordId, chord: "", notes: [] };
 
       const originalChords = [...chords];
       const updatedChordsWithPlaceholder = [
@@ -405,7 +404,8 @@ export default function ChordColumnsContainer({
 
       try {
         const existingChordsForApi = originalChords.map((c) => ({
-          chord: c.chord,
+          symbol: c.chord,
+          notes: c.notes,
         }));
 
         const res = await fetch("/api/generate", {
@@ -422,20 +422,24 @@ export default function ChordColumnsContainer({
         const data = await res.json();
 
         if (!res.ok || data.error) {
+          reportAiFailure("Adding a chord", data);
           setChords(originalChords);
           setLoadingChordId(null);
           return;
         }
 
-        const cleanedReceivedChordSymbol = data.chord?.trim();
+        const cleanedReceivedChordSymbol =
+          typeof data.symbol === "string" ? data.symbol.trim() : "";
         const chordData = cleanedReceivedChordSymbol
           ? Chord.get(cleanedReceivedChordSymbol)
           : null;
+        const receivedNotes: string[] = Array.isArray(data.notes) ? data.notes : [];
 
         if (
           !cleanedReceivedChordSymbol ||
           !chordData ||
-          !chordData.symbol
+          !chordData.symbol ||
+          receivedNotes.length === 0
         ) {
           setChords(originalChords);
           setLoadingChordId(null);
@@ -445,6 +449,7 @@ export default function ChordColumnsContainer({
         const updatedChordItem: ChordItem = {
           id: newChordId,
           chord: chordData.symbol,
+          notes: receivedNotes,
         };
         setChords((prev) =>
           prev.map((ch) => (ch.id === newChordId ? updatedChordItem : ch))
@@ -475,7 +480,7 @@ export default function ChordColumnsContainer({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            chords: chords.map((c) => c.chord),
+            chords: voicedChords,
             index,
             prompt,
             rounds: requestRounds,
@@ -487,29 +492,40 @@ export default function ChordColumnsContainer({
         if (replaceRequestRef.current !== requestId) return;
 
         if (!res.ok || data.error || !Array.isArray(data.alternatives)) {
-          console.error("Replace chord API error:", data.error);
+          reportAiFailure("Finding alternatives", data);
           setReplaceTargetId(null);
           return;
         }
 
         setReplaceOptions(
-          data.alternatives
-            .filter((a: ChordAlternative) => a && typeof a.chord === "string")
+          (data.alternatives as { symbol?: unknown; notes?: unknown; label?: unknown }[])
+            .filter(
+              (a) => a && typeof a.symbol === "string" && Array.isArray(a.notes) && a.notes.length > 0
+            )
             .slice(0, 3)
+            .map((a) => ({
+              chord: a.symbol as string,
+              notes: a.notes as string[],
+              label: typeof a.label === "string" ? a.label : "",
+            }))
         );
       } catch (e) {
         console.error("Error fetching chord alternatives:", e);
         if (replaceRequestRef.current === requestId) setReplaceTargetId(null);
       }
     },
-    [chords, prompt, requestRounds]
+    [chords, voicedChords, prompt, requestRounds]
   );
 
   const handleChooseAlternative = useCallback(
-    (chordId: string, chord: string) => {
+    (chordId: string, alternative: ChordAlternative) => {
       cancelReplace();
       setChords((prev) =>
-        prev.map((c) => (c.id === chordId ? { ...c, chord } : c))
+        prev.map((c) =>
+          c.id === chordId
+            ? { ...c, chord: alternative.chord, notes: alternative.notes }
+            : c
+        )
       );
     },
     [cancelReplace, setChords]
@@ -617,7 +633,7 @@ export default function ChordColumnsContainer({
     const feedbackText = editFeedback.trim();
     if (!feedbackText || isEditSubmitting || chords.length === 0) return;
 
-    const chordsForApi = chords.map((c) => c.chord);
+    const chordsForApi = voicedChords;
     const newIterationIndex = iterations.length;
 
     cancelReplace();
@@ -643,17 +659,18 @@ export default function ChordColumnsContainer({
       const data = await res.json();
 
       if (!res.ok || data.error || !Array.isArray(data.chords)) {
-        console.error("Edit progression API error:", data.error);
+        reportAiFailure("Editing the progression", data);
         setIterations((prev) => prev.slice(0, newIterationIndex));
         setIterationFeedback((prev) => prev.slice(0, newIterationIndex));
         setCurrentIteration(newIterationIndex - 1);
         return;
       }
 
-      const newChordItems: ChordItem[] = data.chords.map(
-        (chord: string, index: number) => ({
+      const newChordItems: ChordItem[] = (data.chords as VoicedChord[]).map(
+        (chord, index) => ({
           id: `${id}-iter-${newIterationIndex}-chord-${index}-${generateUniqueId()}`,
-          chord,
+          chord: chord.symbol,
+          notes: chord.notes,
         })
       );
 
@@ -671,7 +688,7 @@ export default function ChordColumnsContainer({
       setLoadingIterationIndex(null);
       setIsEditSubmitting(false);
     }
-  }, [editFeedback, isEditSubmitting, chords, iterations.length, prompt, id, cancelReplace]);
+  }, [editFeedback, isEditSubmitting, chords, voicedChords, iterations.length, prompt, id, cancelReplace]);
 
   const onEditPopoverOpenChange = useCallback((open: boolean) => {
     setIsEditPopoverOpen(open);
@@ -697,6 +714,7 @@ export default function ChordColumnsContainer({
       <ColumnToolbar
         style={style}
         chords={chords.map((c) => c.chord)}
+        doc={exportDoc}
         prompt={prompt}
         isPlaying={isPlaying}
         onTogglePlayPause={handleTogglePlayPause}
@@ -706,7 +724,7 @@ export default function ChordColumnsContainer({
         isExplanationLoading={isExplanationLoading}
         currentExplanationText={currentExplanationText}
         isSaved={isSaved ? isSaved(saveId) : false}
-        onToggleSave={onToggleSave ? () => onToggleSave(saveId, chords.map((c) => c.chord)) : undefined}
+        onToggleSave={onToggleSave ? () => onToggleSave(saveId, voicedChords) : undefined}
         isSignedIn={isSignedIn}
         iterationIndex={currentIteration}
         iterationCount={iterations.length}
@@ -772,6 +790,7 @@ export default function ChordColumnsContainer({
                             key={chord.id}
                             id={chord.id}
                             chord={chord.chord}
+                            notes={chord.notes}
                             color={
                               colors[index] || {
                                 bg: "hsl(220, 60%, 70%)",

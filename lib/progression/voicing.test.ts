@@ -1,390 +1,136 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Chord, ChordType, Interval, Note } from "tonal";
+import { Note } from "tonal";
 
-import { createSlot, docFromChords, normalizeDoc } from "./doc";
+import { docFromChords, normalizeDoc } from "./doc";
 import { buildMidi } from "./midi";
-import { VOICED_RANGE, voiceChord, voiceSlots } from "./voicing";
-import { voiceProgressionNotes } from "../chordUtils";
+import { DOC_VERSION, type VoicedChord } from "./types";
+import { validateVoicing } from "./voicing";
+import { VoicedChordSchema } from "../schemas";
 
 /**
- * Verification for the voicing engine.
- *
- * The corpus is every chord type tonal can parse on all twelve roots, rather
- * than a handful of examples, because the failures this engine actually had
- * were all edge cases: G13 produced no placement at all, Cdim7 spelled a note
- * the keyboard silently refused to draw, and Cb2 spelled an octave lower than
- * every other bass note and fell off the bottom of the piano.
+ * Voicings come from the model now, so the thing to verify is the gate: good
+ * voicings pass untouched, and every way a voicing can disagree with its
+ * symbol is caught with a message the model can act on.
  */
 
-const ROOTS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-/** Spellings a generator reaches for that are not in the list above. */
-const AWKWARD_ROOTS = ["C#", "F#", "G#", "A#", "D#", "Cb", "Fb", "B#", "E#"];
-
-const CORPUS: string[] = [];
-for (const type of ChordType.all()) {
-    const alias = type.aliases[0];
-    if (alias === undefined) continue;
-    for (const root of ROOTS) CORPUS.push(`${root}${alias}`);
-}
-for (const root of AWKWARD_ROOTS) {
-    for (const alias of ["", "m", "maj7", "m7", "7", "dim7", "sus4", "9", "13", "5"]) {
-        CORPUS.push(`${root}${alias}`);
-    }
-}
-/** Slash chords are a separate path: the bass is not the root. */
-const SLASH_CORPUS = [
-    "C/E", "C/G", "Cmaj7/B", "Am7/G", "Fmaj7/A", "G/B", "Dm7/C", "Bb/D",
-    "Cb/Eb", "F#m7/A", "Ebmaj9/G", "A7/C#", "Gm11/F", "Db/Ab",
-];
-
-const PLAYABLE = [...CORPUS, ...SLASH_CORPUS].filter((s) => !Chord.get(s).empty);
-
-const REAL_PROGRESSIONS = [
-    ["Cmaj7", "Am7", "Fmaj7", "G7"],
-    ["C", "G", "Am", "F"],
-    ["Am", "F", "C", "G"],
-    ["Fmaj9", "Em7", "Am11", "Dm7", "G13"],
-    ["Bm7b5", "E7b9", "Am9"],
-    ["Cmaj7#11", "Ebmaj7", "Bbmaj7", "Ab6/9"],
-    ["C/E", "G/B", "Am7/G", "Fmaj7/A"],
-    ["Csus2", "Fsus4", "Cadd9", "Gsus4"],
-    ["Dm7", "G7", "Cmaj7", "A7b9", "Dm7", "G13", "Cmaj9"],
-    ["Cb5", "Fb", "Cbmaj7"],
-];
-
-const midiOf = (note: string) => {
-    const m = Note.midi(note);
-    assert.notEqual(m, null, `${note} has no MIDI number`);
-    return m as number;
+const ok = (symbol: string, notes: string[]) => {
+    const result = validateVoicing(symbol, notes);
+    assert.ok(result.ok, `${symbol} [${notes.join(" ")}] was rejected: ${result.ok ? "" : result.error}`);
+    return result.notes;
 };
 
-const chromaOf = (note: string) => {
-    const c = Note.chroma(note);
-    assert.notEqual(c, undefined, `${note} has no chroma`);
-    return c as number;
+const rejected = (symbol: string, notes: string[], mentions: RegExp) => {
+    const result = validateVoicing(symbol, notes);
+    assert.ok(!result.ok, `${symbol} [${notes.join(" ")}] should have been rejected`);
+    assert.match(result.error, mentions);
 };
 
-/** The interval degrees a chord actually contains, e.g. [1, 3, 5, 7]. */
-const degreesOf = (symbol: string) =>
-    Chord.get(symbol).intervals.map((iv) => Interval.get(iv).num ?? 0);
-
-test(`corpus covers every chord type on all twelve roots`, () => {
-    assert.ok(ChordType.all().length > 50, "tonal should know many chord types");
-    assert.ok(PLAYABLE.length > 1000, `expected a large corpus, got ${PLAYABLE.length}`);
+test("idiomatic voicings pass", () => {
+    ok("Dm9", ["D2", "C4", "E4", "F4", "A4"]);
+    // Rootless above the bass, no 5th — the usual jazz shape.
+    ok("G13", ["G2", "F3", "B3", "E4"]);
+    ok("Cmaj7", ["C2", "G3", "B3", "E4"]);
+    ok("C/E", ["E2", "G3", "C4", "E4"]);
+    ok("Am7/G", ["G2", "C4", "E4", "A4"]);
+    ok("C7b9", ["C2", "E3", "Bb3", "Db4"]);
+    ok("Csus4", ["C2", "F3", "G3", "C4"]);
+    ok("C5", ["C2", "G2", "C3"]);
+    ok("Bm7b5", ["B1", "A3", "D4", "F4"]);
 });
 
-test("every chord sounds something", () => {
-    for (const symbol of PLAYABLE) {
-        const { all, voices, bass } = voiceChord(createSlot(symbol));
-        assert.ok(voices.length >= 1, `${symbol} produced no chord voices`);
-        assert.notEqual(bass, null, `${symbol} produced no bass note`);
-        assert.ok(all.length >= 2, `${symbol} produced only ${all.length} note(s)`);
-    }
+test("notes come back sorted, deduplicated and plainly spelled", () => {
+    assert.deepEqual(ok("Cmaj7", ["E4", "C2", "B3", "E4", "G3"]), ["C2", "G3", "B3", "E4"]);
+    // Cb and E# would never light a key; the pitch is kept, the spelling is not.
+    assert.deepEqual(ok("Abm", ["Ab2", "Cb4", "Eb4"]), ["Ab2", "B3", "Eb4"]);
+    assert.deepEqual(ok("C#", ["C#2", "E#3", "G#3"]), ["C#2", "F3", "G#3"]);
+    assert.deepEqual(ok("Am", ["a2", "c4", "e4"]), ["A2", "C4", "E4"]);
 });
 
-test("every voiced note belongs to the chord", () => {
-    for (const symbol of PLAYABLE) {
-        const chord = Chord.get(symbol);
-        const allowed = new Set(chord.notes.map(chromaOf));
-        for (const note of voiceChord(createSlot(symbol)).all) {
-            assert.ok(
-                allowed.has(chromaOf(note)),
-                `${symbol} voiced ${note}, which is not one of its tones (${chord.notes.join(" ")})`,
-            );
-        }
-    }
+test("each kind of mismatch is caught and explained", () => {
+    rejected("Cmaj7", ["C2", "E3", "G3", "B3", "D4"], /D4 is not in the chord/);
+    rejected("Cmaj7", ["E2", "C3", "G3", "B3"], /lowest note must be the bass, C.*Cmaj7\/E/);
+    rejected("Cmaj7", ["C2", "G3", "B3", "C4"], /missing E/);
+    rejected("Cmaj7", ["C2", "E3", "G3", "C4"], /missing B/);
+    rejected("C7b9", ["C2", "E3", "G3", "Bb3"], /missing Db/);
+    rejected("Cmaj9", ["C2", "E3", "G3", "B3"], /missing D/);
+    rejected("Cm7b5", ["C2", "Eb3", "Bb3", "C4"], /missing Gb/);
+    // A slash chord still has to contain its root.
+    rejected("C/E", ["E2", "G3", "E4"], /missing C/);
+    rejected("C", ["C2", "E3"], /3-8 different notes/);
+    rejected("C", ["C1", "E3", "G3"], /outside the playable range/);
+    rejected("C", ["C2", "E3", "G"], /"G" is not a pitched note/);
+    rejected("C", ["C2", "E3", "H3"], /not a pitched note/);
 });
 
-test("the bass is the chord's bass, or its root", () => {
-    for (const symbol of PLAYABLE) {
-        const chord = Chord.get(symbol);
-        const { bass } = voiceChord(createSlot(symbol));
-        const expected = chromaOf(chord.bass || (chord.tonic as string));
-        assert.equal(
-            chromaOf(bass as string),
-            expected,
-            `${symbol} put ${bass} in the bass, expected ${chord.bass || chord.tonic}`,
-        );
-    }
+test("the schema repairs the symbol, then checks the notes against it", () => {
+    const parsed = VoicedChordSchema.safeParse({ symbol: "C△7", notes: ["C2", "B3", "E4", "G4"] });
+    assert.ok(parsed.success);
+    assert.equal(parsed.data.symbol, "Cmaj7");
+    assert.deepEqual(parsed.data.notes, ["C2", "B3", "E4", "G4"]);
+
+    const bad = VoicedChordSchema.safeParse({ symbol: "Cmaj7", notes: ["C2", "Bb3", "E4"] });
+    assert.ok(!bad.success);
+    assert.deepEqual(bad.error.issues[0].path, ["notes"]);
+    assert.match(bad.error.issues[0].message, /Bb3 is not in the chord/);
+
+    // The output parses again unchanged, so re-validation downstream is safe.
+    const again = VoicedChordSchema.safeParse(parsed.data);
+    assert.ok(again.success);
+    assert.deepEqual(again.data, parsed.data);
 });
 
-test("thinning never drops a guide tone", () => {
-    for (const symbol of PLAYABLE) {
-        const chord = Chord.get(symbol);
-        const degrees = degreesOf(symbol);
-        const sounded = new Set(voiceChord(createSlot(symbol)).all.map(chromaOf));
+const PROGRESSION: VoicedChord[] = [
+    { symbol: "Dm9", notes: ["D2", "C4", "E4", "F4", "A4"] },
+    { symbol: "G13", notes: ["G2", "F3", "B3", "E4"] },
+    { symbol: "Cmaj7", notes: ["C2", "G3", "B3", "E4"] },
+    { symbol: "A7b9", notes: ["A2", "G3", "C#4", "Bb4"] },
+];
 
-        // The 3rd, or the 2nd/4th standing in for it in a sus chord.
-        const thirdAt = degrees.findIndex((d) => d === 3 || d === 2 || d === 4);
-        if (thirdAt >= 0) {
-            assert.ok(
-                sounded.has(chromaOf(chord.notes[thirdAt])),
-                `${symbol} dropped its 3rd (${chord.notes[thirdAt]})`,
-            );
-        }
+test("saved docs keep their notes, and nothing invents notes for older ones", () => {
+    const doc = docFromChords(PROGRESSION, { prompt: "test" });
+    const restored = normalizeDoc(JSON.parse(JSON.stringify(doc)));
+    assert.deepEqual(restored.slots.map((s) => s.notes), PROGRESSION.map((c) => c.notes));
 
-        const seventhAt = degrees.findIndex((d) => d === 7 || d === 6);
-        if (seventhAt >= 0) {
-            assert.ok(
-                sounded.has(chromaOf(chord.notes[seventhAt])),
-                `${symbol} dropped its 7th (${chord.notes[seventhAt]})`,
-            );
-        }
-    }
-});
+    // Tampered notes do not survive a round trip.
+    const tampered = JSON.parse(JSON.stringify(doc));
+    tampered.slots[0].notes = ["D2", "Db4", "F4"];
+    assert.deepEqual(normalizeDoc(tampered).slots[0].notes, []);
 
-test("an altered 5th is never dropped", () => {
-    for (const symbol of PLAYABLE) {
-        const chord = Chord.get(symbol);
-        const fifthAt = Chord.get(symbol).intervals.findIndex((iv) => {
-            const parsed = Interval.get(iv);
-            return parsed.num === 5 && parsed.q !== "P";
-        });
-        if (fifthAt < 0) continue;
+    // Earlier versions had no notes at all.
+    const legacy = { ...JSON.parse(JSON.stringify(doc)), version: DOC_VERSION - 1 };
+    assert.deepEqual(normalizeDoc(legacy).slots[1].notes, []);
 
-        const sounded = new Set(voiceChord(createSlot(symbol)).all.map(chromaOf));
-        assert.ok(
-            sounded.has(chromaOf(chord.notes[fifthAt])),
-            `${symbol} dropped its altered 5th (${chord.notes[fifthAt]})`,
-        );
-    }
-});
-
-test("voices ascend, with no duplicated pitches", () => {
-    for (const symbol of PLAYABLE) {
-        const { all } = voiceChord(createSlot(symbol));
-        const midi = all.map(midiOf);
-        for (let i = 1; i < midi.length; i += 1) {
-            assert.ok(
-                midi[i] > midi[i - 1],
-                `${symbol} voiced ${all.join(" ")} — ${all[i]} does not rise above ${all[i - 1]}`,
-            );
-        }
-    }
-});
-
-test("nothing is voiced outside VOICED_RANGE", () => {
-    const low = midiOf(VOICED_RANGE.low);
-    const high = midiOf(VOICED_RANGE.high);
-
-    for (const symbol of PLAYABLE) {
-        for (const note of voiceChord(createSlot(symbol)).all) {
-            const m = midiOf(note);
-            assert.ok(
-                m >= low && m <= high,
-                `${symbol} voiced ${note} (${m}), outside ${VOICED_RANGE.low}-${VOICED_RANGE.high}`,
-            );
-        }
-    }
-
-    for (const progression of REAL_PROGRESSIONS) {
-        for (const notes of voiceProgressionNotes(progression)) {
-            for (const note of notes) {
-                const m = midiOf(note);
-                assert.ok(m >= low && m <= high, `${progression.join("-")} voiced ${note}`);
-            }
-        }
-    }
-});
-
-/**
- * Mirrors react-piano's own parser (`NOTE_REGEX` and `PITCH_INDEXES` in
- * dist/react-piano.cjs.js) and the sanitising filter in PianoKeyboard.tsx.
- * A note that fails either is dropped from the keyboard silently — it sounds,
- * but no key lights up, which is exactly the Cdim7 and Cb bug.
- */
-const KEYBOARD_FILTER = /^[A-G](?:#|b)?\d$/;
-const REACT_PIANO_PITCHES = new Set([
-    "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B",
-]);
-
-test("every voiced note can be drawn on the keyboard", () => {
-    const check = (note: string, context: string) => {
-        assert.match(note, KEYBOARD_FILTER, `${context}: ${note} fails PianoKeyboard's filter`);
-        const pitch = note.replace(/\d+$/, "");
-        assert.ok(
-            REACT_PIANO_PITCHES.has(pitch),
-            `${context}: react-piano cannot parse the pitch "${pitch}" (from ${note})`,
-        );
-    };
-
-    for (const symbol of PLAYABLE) {
-        for (const note of voiceChord(createSlot(symbol)).all) check(note, symbol);
-    }
-    for (const progression of REAL_PROGRESSIONS) {
-        for (const notes of voiceProgressionNotes(progression)) {
-            for (const note of notes) check(note, progression.join("-"));
-        }
-    }
-});
-
-test("the bass is doubled an octave up, under the voicing", () => {
-    for (const symbol of PLAYABLE) {
-        const { bass, voices } = voiceChord(createSlot(symbol));
-        const bassMidi = midiOf(bass as string);
-        const doubled = voices.find((v) => midiOf(v) === bassMidi + 12);
-
-        // A doubling is only added when it clears the bass and stays below the
-        // upper structure, so its absence is allowed — its wrongness is not.
-        if (doubled) {
-            assert.equal(
-                chromaOf(doubled),
-                chromaOf(bass as string),
-                `${symbol} doubled ${bass} as ${doubled}`,
-            );
-        }
-    }
-});
-
-test("voice count stays bounded", () => {
-    for (const symbol of PLAYABLE) {
-        const { all } = voiceChord(createSlot(symbol));
-        // 4 upper voices, plus the bass and its octave.
-        assert.ok(all.length <= 6, `${symbol} voiced ${all.length} notes: ${all.join(" ")}`);
-    }
-});
-
-test("voicing is deterministic", () => {
-    for (const progression of REAL_PROGRESSIONS) {
-        assert.deepEqual(
-            voiceProgressionNotes(progression),
-            voiceProgressionNotes(progression),
-            `${progression.join("-")} voiced differently on a second call`,
-        );
-    }
-});
-
-test("what you hear is what you export", () => {
-    for (const progression of REAL_PROGRESSIONS) {
-        const doc = docFromChords(progression);
-        const played = voiceProgressionNotes(progression);
-        const exported = voiceSlots(doc.slots).map((v) => v.all);
-        assert.deepEqual(played, exported, `${progression.join("-")} exports different notes`);
-
-        const midi = buildMidi(doc);
-        assert.ok(midi && midi.length > 0, `${progression.join("-")} produced no MIDI`);
-    }
-});
-
-test("the MIDI bass track carries the fundamental only", () => {
-    for (const progression of REAL_PROGRESSIONS) {
-        const doc = docFromChords(progression);
-        for (const { bass, voices } of voiceSlots(doc.slots)) {
-            assert.ok(bass, `${progression.join("-")} has a slot with no bass`);
-            // The octave doubling belongs to the left hand, not the bass part.
-            assert.ok(
-                !voices.includes(bass as string),
-                `${bass} appears in both the bass track and the chord track`,
-            );
-        }
-    }
-});
-
-test("voice leading beats voicing each chord in isolation", () => {
-    const topMotion = (voicings: string[][]) => {
-        let total = 0;
-        for (let i = 1; i < voicings.length; i += 1) {
-            const previous = voicings[i - 1];
-            const current = voicings[i];
-            if (!previous.length || !current.length) continue;
-            total += Math.abs(
-                midiOf(current[current.length - 1]) - midiOf(previous[previous.length - 1]),
-            );
-        }
-        return total;
-    };
-
-    for (const progression of REAL_PROGRESSIONS) {
-        if (progression.length < 3) continue;
-
-        const auto = voiceProgressionNotes(progression);
-        const naive = progression.map(
-            (symbol) => voiceChord(createSlot(symbol, { voicing: "close" })).all,
-        );
-
-        assert.ok(
-            topMotion(auto) <= topMotion(naive),
-            `${progression.join("-")}: top voice moves ${topMotion(auto)} semitones, ` +
-                `worse than voicing each chord alone (${topMotion(naive)})`,
-        );
-    }
-});
-
-test("the top voice stays inside an octave across a progression", () => {
-    for (const progression of REAL_PROGRESSIONS) {
-        const tops = voiceProgressionNotes(progression)
-            .filter((notes) => notes.length)
-            .map((notes) => midiOf(notes[notes.length - 1]));
-        if (tops.length < 2) continue;
-
-        const spread = Math.max(...tops) - Math.min(...tops);
-        assert.ok(
-            spread <= 12,
-            `${progression.join("-")}: top voice ranges over ${spread} semitones`,
-        );
-    }
-});
-
-test("named voicing shapes are left exactly as authored", () => {
-    for (const shape of ["close", "drop2", "drop3", "shell", "spread"] as const) {
-        const slot = createSlot("Cmaj7", { voicing: shape });
-        const alone = voiceChord(slot);
-        const [inProgression] = voiceSlots([
-            slot,
-            createSlot("Fmaj7", { voicing: shape }),
-        ]);
-        assert.deepEqual(
-            alone.all,
-            inProgression.all,
-            `${shape} changed when voiced inside a progression`,
-        );
-    }
-});
-
-test("unparseable symbols yield nothing rather than throwing", () => {
-    for (const junk of ["", "Hzz9", "???", "C###zzz"]) {
-        const { all } = voiceChord(createSlot(junk));
-        assert.deepEqual(all, [], `${JSON.stringify(junk)} voiced ${all.join(" ")}`);
-    }
-    assert.deepEqual(voiceProgressionNotes([]), []);
-});
-
-/**
- * Saved progressions are the one place this change reaches existing user data:
- * every row in the database was written by the old engine, and its stored
- * `voicing` was a default nobody chose, not a decision to preserve.
- */
-test("saved progressions from before v3 are re-voiced", () => {
-    const slot = {
-        id: "a", symbol: "Cmaj7", voicing: "close",
-        octave: 3, inversion: 0, durationBeats: 4,
-    };
-
-    const migrated = normalizeDoc({ version: 2, id: "x", slots: [slot] });
-    assert.equal(migrated.slots[0].voicing, "auto", "a v2 doc kept its old voicing");
-    assert.equal(migrated.version, 3);
-
-    const current = normalizeDoc({ version: 3, id: "x", slots: [slot] });
-    assert.equal(current.slots[0].voicing, "close", "a v3 doc lost a deliberate voicing");
-
-    // The oldest rows have no doc at all, only the denormalised chord column.
     const fromChords = normalizeDoc(null, ["Cmaj7", "Am7"]);
-    assert.equal(fromChords.slots.length, 2);
-    assert.equal(fromChords.slots[0].voicing, "auto");
-    assert.ok(voiceSlots(fromChords.slots).every((v) => v.all.length >= 2));
-
-    for (const junk of [undefined, {}, { slots: [] }, { slots: [{ symbol: "Hzz" }] }]) {
-        assert.ok(normalizeDoc(junk, ["C"]).slots.length >= 1, `${JSON.stringify(junk)} lost its chords`);
-    }
+    assert.deepEqual(fromChords.slots.map((s) => s.symbol), ["Cmaj7", "Am7"]);
+    assert.deepEqual(fromChords.slots.map((s) => s.notes), [[], []]);
 });
+
+test("the downloaded file contains exactly the model's notes", () => {
+    const doc = docFromChords(PROGRESSION, { prompt: "test" });
+    const bytes = buildMidi(doc);
+    assert.ok(bytes);
+
+    const { onsets, division, tempo, trackCount } = parseMidi(bytes as Uint8Array);
+    assert.equal(trackCount, 2, "expected a chord track and a bass track");
+    assert.equal(tempo, doc.tempo);
+
+    const ticks = [...onsets.keys()].sort((a, b) => a - b);
+    assert.equal(ticks.length, PROGRESSION.length);
+
+    PROGRESSION.forEach((chord, i) => {
+        const inFile = (onsets.get(ticks[i]) as number[]).sort((a, b) => a - b);
+        assert.deepEqual(inFile, chord.notes.map((n) => Note.midi(n)), `${chord.symbol}: file does not match`);
+        if (i > 0) assert.equal(ticks[i] - ticks[i - 1], doc.slots[i - 1].durationBeats * division);
+    });
+});
+
 
 /**
  * A minimal Standard MIDI File reader.
  *
- * Comparing two calls into the engine only proves the engine agrees with
- * itself. The question worth answering is whether the bytes the browser
- * downloads carry the notes you actually heard, so this reads them back.
+ * The question worth answering is whether the bytes the browser downloads
+ * carry the notes you actually heard, so this reads them back.
  */
 function parseMidi(bytes: Uint8Array) {
     let p = 0;
@@ -469,34 +215,3 @@ function parseMidi(bytes: Uint8Array) {
     return { trackCount, division, tempo, onsets };
 }
 
-test("the downloaded file contains the notes you heard", () => {
-    for (const progression of REAL_PROGRESSIONS) {
-        // Exactly what MidiDownloader does with the toolbar's chord list.
-        const doc = docFromChords(progression, { prompt: "test" });
-        const bytes = buildMidi(doc);
-        assert.ok(bytes, `${progression.join("-")} produced no MIDI`);
-
-        const { onsets, division, tempo, trackCount } = parseMidi(bytes as Uint8Array);
-        assert.equal(trackCount, 2, "expected a chord track and a bass track");
-        assert.equal(tempo, doc.tempo);
-
-        const ticks = [...onsets.keys()].sort((a, b) => a - b);
-        assert.equal(ticks.length, progression.length, `${progression.join("-")}: wrong chord count`);
-
-        const heard = voiceProgressionNotes(progression);
-        progression.forEach((symbol, i) => {
-            const inFile = (onsets.get(ticks[i]) as number[]).sort((a, b) => a - b);
-            const played = heard[i].map(midiOf).sort((a, b) => a - b);
-            assert.deepEqual(inFile, played, `${symbol}: the file does not match playback`);
-        });
-
-        // Every chord occupies its full slot, back to back.
-        for (let i = 1; i < ticks.length; i += 1) {
-            assert.equal(
-                ticks[i] - ticks[i - 1],
-                doc.slots[i - 1].durationBeats * division,
-                `${progression.join("-")}: chord ${i} does not start where the last one ends`,
-            );
-        }
-    }
-});

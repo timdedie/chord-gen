@@ -2,16 +2,25 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
-import type { ProgressionDoc } from "@/lib/progression/types";
+import { docFromChords } from "@/lib/progression/doc";
+import type { ProgressionDoc, VoicedChord } from "@/lib/progression/types";
 
 export interface SavedProgression {
     id: string;
     chords: string[];
-    /** Present on everything read back from the server. */
-    doc?: ProgressionDoc;
+    /** Carries the notes — `chords` only has the symbols. */
+    doc: ProgressionDoc;
     style: string;
     prompt: string;
     savedAt: number;
+}
+
+/** What a card hands over to save: its chords as voiced, not just their symbols. */
+export interface SaveRequest {
+    id: string;
+    chords: VoicedChord[];
+    style: string;
+    prompt: string;
 }
 
 export function useSavedProgressions() {
@@ -40,8 +49,18 @@ export function useSavedProgressions() {
     );
 
     const toggleSave = useCallback(
-        async (progression: Omit<SavedProgression, "savedAt">) => {
+        async ({ id, chords: voiced, style, prompt }: SaveRequest) => {
             if (!isSignedIn) return;
+
+            // The doc is what keeps the notes: the `chords` column only has
+            // room for symbols.
+            const progression: Omit<SavedProgression, "savedAt"> = {
+                id,
+                chords: voiced.map((c) => c.symbol),
+                doc: docFromChords(voiced, { id, prompt, style }),
+                style,
+                prompt,
+            };
 
             const alreadySaved = saved.some((p) => p.id === progression.id);
             if (alreadySaved) {

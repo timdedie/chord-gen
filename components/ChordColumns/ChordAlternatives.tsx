@@ -8,12 +8,15 @@ import { cn } from "@/lib/utils";
 
 export interface ChordAlternative {
   chord: string;
+  /** The exact notes the model voiced this alternative with, lowest first. */
+  notes: string[];
   label: string;
 }
 
 interface ChordAlternativesProps {
   /** The chord being replaced — shown as the first band, still playable. */
   originalChord: string;
+  originalNotes: string[];
   originalColor: ChordColor;
   /** `null` while the model is still thinking; three options once it answers. */
   alternatives: ChordAlternative[] | null;
@@ -21,8 +24,8 @@ interface ChordAlternativesProps {
   /** Id of whichever band is currently sounding, so it can flash on press. */
   playingId: string | null;
   idPrefix: string;
-  onPlay: (chord: string, id: string) => void;
-  onChoose: (chord: string) => void;
+  onPlay: (chord: string, notes: string[], id: string) => void;
+  onChoose: (alternative: ChordAlternative) => void;
   /** Picking the current chord is how you back out — there is no separate close. */
   onKeepOriginal: () => void;
 }
@@ -59,6 +62,7 @@ const COMMIT_MS = 360;
 
 export default function ChordAlternatives({
   originalChord,
+  originalNotes,
   originalColor,
   alternatives,
   isDarkMode,
@@ -123,7 +127,7 @@ export default function ChordAlternatives({
         initial={{ flex: 1 }}
         animate={{ flex: growth("original") }}
         transition={isCommitting ? COMMIT_EASE : BAND_SPRING}
-        onClick={() => onPlay(originalChord, `${idPrefix}-original`)}
+        onClick={() => onPlay(originalChord, originalNotes, `${idPrefix}-original`)}
       >
         <motion.div
           className="absolute inset-0 bg-black pointer-events-none"
@@ -170,7 +174,7 @@ export default function ChordAlternatives({
               // Placeholders sit back a little so the row reads as "not ready".
               opacity: alt ? 1 : 0.45,
             }}
-            onClick={alt ? () => onPlay(alt.chord, bandId) : undefined}
+            onClick={alt ? () => onPlay(alt.chord, alt.notes, bandId) : undefined}
           >
             {/* Hairline seam, tinted from the band's own text colour so it
                 stays a whisper in both themes. It has no place once this band
@@ -200,7 +204,7 @@ export default function ChordAlternatives({
                   srLabel={`Replace ${originalChord} with ${alt.chord}`}
                   enterDelay={0.16 + i * 0.05}
                   fadeOut={isCommitting}
-                  onClick={() => commit(key, () => onChoose(alt.chord))}
+                  onClick={() => commit(key, () => onChoose(alt))}
                 />
               </>
             ) : (

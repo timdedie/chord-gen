@@ -4,9 +4,11 @@ import { EditProgressionSchema } from '@/lib/schemas';
 import { aiRoute, AiRouteError, generateStructured } from '@/lib/ai/gateway';
 import { CHORD_GENERATION_SYSTEM_PROMPT } from '@/lib/prompts/system';
 import { buildEditProgressionMessage } from '@/lib/prompts/edit-progression';
+import { parseVoicedChords } from '@/lib/prompts/format';
 
 interface RequestBody {
-    chords?: string[];
+    /** The progression being edited, each chord with its notes. */
+    chords?: unknown;
     feedback?: string;
     prompt?: string;
 }
@@ -14,7 +16,8 @@ interface RequestBody {
 // Previously the only route with no authentication and no rate limiting, which
 // left an unmetered model endpoint open to anyone. `aiRoute` applies both.
 export const POST = aiRoute<RequestBody>('edit-progression', async ({ body }) => {
-    const { chords = [], feedback, prompt } = body;
+    const { feedback, prompt } = body;
+    const chords = parseVoicedChords(body.chords);
 
     if (!chords.length) {
         throw new AiRouteError('Chords are required to edit a progression.', 400);

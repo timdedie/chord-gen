@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 interface ChordColumnProps {
   id: string;
   chord: string;
+  /** The exact notes this chord plays, lowest first. */
+  notes: string[];
   color: ChordColor;
   /** Id of whichever chord is currently sounding — a column or one of its alternatives. */
   playingId: string | null;
@@ -22,16 +24,17 @@ interface ChordColumnProps {
   isReplacing: boolean;
   /** `null` while the alternatives are still being generated. */
   alternatives: ChordAlternative[] | null;
-  onPlay: (chord: string, id: string) => void;
+  onPlay: (chord: string, notes: string[], id: string) => void;
   onRemove: () => void;
   onRequestReplace: () => void;
   onCancelReplace: () => void;
-  onChooseAlternative: (chord: string) => void;
+  onChooseAlternative: (alternative: ChordAlternative) => void;
 }
 
 export default function ChordColumn({
   id,
   chord,
+  notes,
   color,
   playingId,
   loading,
@@ -106,7 +109,7 @@ export default function ChordColumn({
         isReplacing && "min-w-[210px]",
         isDragging && "z-50 opacity-80 shadow-2xl"
       )}
-      onClick={isReplacing || isPlaceholder ? undefined : () => onPlay(chord, id)}
+      onClick={isReplacing || isPlaceholder ? undefined : () => onPlay(chord, notes, id)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -252,6 +255,7 @@ export default function ChordColumn({
         {isReplacing && (
           <ChordAlternatives
             originalChord={chord}
+            originalNotes={notes}
             originalColor={color}
             alternatives={alternatives}
             isDarkMode={isDarkMode}

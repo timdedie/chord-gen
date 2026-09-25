@@ -1,4 +1,6 @@
+import type { VoicedChord } from '@/lib/progression/types';
 import { type GenerationRound, collectFeedback, formatRounds } from './history';
+import { formatVoicedChord } from './format';
 
 /**
  * The session so far, framed as direction the substitutions have to respect —
@@ -27,17 +29,17 @@ ${notesLine}`;
  * to their neighbours rather than in isolation.
  */
 export function buildReplaceChordMessage(
-    chords: string[],
+    chords: VoicedChord[],
     index: number,
     prompt: string | undefined,
     history: GenerationRound[] = [],
 ): string {
-    const original = chords[index];
-    const before = index > 0 ? chords[index - 1] : null;
-    const after = index < chords.length - 1 ? chords[index + 1] : null;
+    const original = chords[index].symbol;
+    const before = index > 0 ? chords[index - 1].symbol : null;
+    const after = index < chords.length - 1 ? chords[index + 1].symbol : null;
 
     const progressionStr = chords
-        .map((c, i) => (i === index ? `[${c}]` : c))
+        .map((c, i) => (i === index ? `>>${formatVoicedChord(c)}<<` : formatVoicedChord(c)))
         .join(' - ');
 
     const neighbours = before && after
@@ -52,9 +54,9 @@ export function buildReplaceChordMessage(
         ? `Musical direction for the progression: "${prompt}". Every alternative must still serve it.`
         : 'Stay true to the character the progression already has.';
 
-    const context = `Progression: ${progressionStr}
+    const context = `Progression (each chord's notes in brackets, lowest first): ${progressionStr}
 
-Replace the bracketed chord, ${original}. ${neighbours}
+Replace the marked chord, ${original}. ${neighbours} Voice each alternative so its notes connect smoothly to the voicings on either side.
 
 ${direction}`;
 

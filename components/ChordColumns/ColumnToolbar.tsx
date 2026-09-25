@@ -23,6 +23,7 @@ import { SignInButton } from "@clerk/nextjs";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
+import type { ProgressionDoc } from "@/lib/progression/types";
 
 const MidiDownloaderInline = dynamic(
   () => import("@/components/MidiDownloader"),
@@ -52,6 +53,8 @@ const DynamicMarkdownDisplay = dynamic(
 interface ColumnToolbarProps {
   style: string;
   chords: string[];
+  /** What the MIDI export writes — the same notes playback sounds. */
+  doc: ProgressionDoc;
   prompt: string;
   isPlaying: boolean;
   onTogglePlayPause: () => void;
@@ -78,6 +81,7 @@ interface ColumnToolbarProps {
 export default function ColumnToolbar({
   style,
   chords,
+  doc,
   prompt,
   isPlaying,
   onTogglePlayPause,
@@ -274,7 +278,7 @@ export default function ColumnToolbar({
           </PopoverContent>
         </Popover>
 
-        <MidiDownloaderInline chords={chords} prompt={prompt} compact variant="ghost" />
+        <MidiDownloaderInline doc={doc} prompt={prompt} compact variant="ghost" />
         {onToggleSave && (
           isSignedIn ? (
             <Button

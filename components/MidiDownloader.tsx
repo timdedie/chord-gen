@@ -5,33 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
-import { docFromChords } from "@/lib/progression/doc";
 import { buildMidi, midiFilename } from "@/lib/progression/midi";
 import type { ProgressionDoc } from "@/lib/progression/types";
 
 interface MidiDownloaderProps {
-    /** Legacy chord list. Ignored when `doc` is supplied. */
-    chords?: string[];
-    /** The progression document — carries tempo, durations and voicing. */
-    doc?: ProgressionDoc;
+    /** The progression document — carries tempo, durations and notes. */
+    doc: ProgressionDoc;
     prompt: string;
     compact?: boolean;
     variant?: React.ComponentProps<typeof Button>["variant"];
 }
 
 const MidiDownloader: React.FC<MidiDownloaderProps> = ({
-    chords,
-    doc,
+    doc: exportDoc,
     prompt,
     compact = false,
     variant,
 }) => {
-    // A bare chord list still exports, by adopting the document defaults.
-    const exportDoc = useMemo(
-        () => doc ?? docFromChords(chords ?? [], { prompt }),
-        [doc, chords, prompt],
-    );
-
     // Building the bytes is pure, so it can be derived. The blob URL is not,
     // and is created on click instead — a results page renders several of these
     // and only one is ever downloaded.

@@ -14,7 +14,7 @@ import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multipl
 import { GenerationRound, normalizeHistory, sanitizeFeedback } from '@/lib/prompts/history';
 import { clampChordCount, resolveChordCount } from '@/lib/prompts/chordCount';
 import { captureServer } from '@/lib/analytics/posthog-server';
-import { repairProgression } from '@/lib/ai/repair';
+import type { VoicedChord } from '@/lib/progression/types';
 import { cacheKey, readCache, writeCache } from '@/lib/ai/cache';
 
 export const maxDuration = 25;
@@ -32,7 +32,7 @@ interface RequestBody {
 }
 
 interface Progression {
-    chords: string[];
+    chords: VoicedChord[];
     style: string;
 }
 
@@ -57,7 +57,7 @@ function currentChordCount(history: GenerationRound[], requested: number): numbe
 }
 
 /** The length the model settled on — the most common across the returned progressions. */
-function resultChordCount(progressions: { chords: string[] }[], fallback: number): number {
+function resultChordCount(progressions: { chords: unknown[] }[], fallback: number): number {
     const tally = new Map<number, number>();
     for (const p of progressions) {
         tally.set(p.chords.length, (tally.get(p.chords.length) ?? 0) + 1);
@@ -71,31 +71,6 @@ function resultChordCount(progressions: { chords: string[] }[], fallback: number
         }
     }
     return best;
-}
-
-/**
- * Rescue a response that failed validation because one progression was bad.
- *
- * Three good options after three full regenerations is a worse outcome than two
- * good options now, so the malformed ones are dropped and whatever survived is
- * returned. Anything the repair pass could not fix is genuinely unusable.
- */
-function salvageProgressions(raw: unknown): { progressions: Progression[] } | null {
-    const candidate = raw as { progressions?: unknown };
-    if (!Array.isArray(candidate?.progressions)) return null;
-
-    const usable: Progression[] = [];
-    for (const entry of candidate.progressions) {
-        const item = entry as { chords?: unknown; style?: unknown };
-        if (!Array.isArray(item?.chords)) continue;
-
-        const { chords, dropped } = repairProgression(item.chords.map(String));
-        if (dropped.length > 0 || chords.length < 2) continue;
-
-        usable.push({ chords, style: typeof item.style === 'string' ? item.style : 'Alternative' });
-    }
-
-    return usable.length > 0 ? { progressions: usable } : null;
 }
 
 function todayDate(): string {
@@ -150,7 +125,7 @@ export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, use
     // generation the user never got, and someone spending one expects a fresh
     // answer rather than a neighbour's.
     const cacheable = history.length === 0 && !feedback && !premium;
-    const key = cacheKey(['generate-multiple', prompt, count, modelId]);
+    const key = cacheKey(['generate-multiple', 'voiced', prompt, count, modelId]);
 
     const result = (cacheable && readCache<{ progressions: Progression[] }>(key)) || await generateStructured({
         task: 'generate-multiple',
@@ -165,7 +140,6 @@ export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, use
         schema: createMultipleProgressionsSchema(count, { allowLengthChange: !!feedback }),
         temperature: 1.2,
         tier: tierFor(premiumGranted),
-        salvage: salvageProgressions,
     });
 
     if (cacheable) writeCache(key, result);

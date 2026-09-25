@@ -7,6 +7,8 @@ import { toast } from "sonner";
 export interface ChordItem {
     id: string;
     chord: string;
+    /** The exact notes to play, lowest (the bass) first — chosen by the model. */
+    notes: string[];
 }
 
 const generateUniqueId = () => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -23,7 +25,7 @@ interface GenerationParams {
 
 // Added: Define types for the expected API response
 interface ApiChordProgressionResponse {
-    chords: string[];
+    chords: { symbol: string; notes: string[] }[];
     error?: string;
     details?: any; // To capture potential error details from API
 }
@@ -60,7 +62,7 @@ export function useChordManagement(props?: UseChordManagementProps) {
             let generatedChordsResult = null;
 
             try {
-                const existingChordsForApi = currentChords.map(c => ({ chord: c.chord }));
+                const existingChordsForApi = currentChords.map(c => ({ symbol: c.chord, notes: c.notes }));
 
                 const res = await fetch("/api/generate", {
                     method: "POST",
@@ -87,18 +89,18 @@ export function useChordManagement(props?: UseChordManagementProps) {
                     return null;
                 }
 
-                const receivedChordSymbols = data.chords;
+                const receivedChords = data.chords;
 
-                if (!Array.isArray(receivedChordSymbols)) {
+                if (!Array.isArray(receivedChords)) {
                     showErrorToast("Generation Error", "AI returned an unexpected data format.");
                     setFullLoading(false); return null;
                 }
 
-                // Data from API is already transformed by Zod, so direct trim is sufficient here.
-                // The .replace(/△/g, "") is removed as Tonal handles △ correctly.
-                const cleanedChordSymbols = receivedChordSymbols
-                    .map((c: string) => c.trim()) // API should provide cleaned strings via Zod
-                    .filter((c: string) => c);
+                // Symbols and notes were already validated against each other by the API.
+                const usableChords = receivedChords.filter(
+                    (c) => typeof c?.symbol === "string" && c.symbol.trim() && Array.isArray(c.notes) && c.notes.length > 0
+                );
+                const cleanedChordSymbols = usableChords.map((c) => c.symbol.trim());
 
 
                 let allCleanedChordsAreValid = true;
@@ -140,6 +142,7 @@ export function useChordManagement(props?: UseChordManagementProps) {
                     return {
                         id: originalChordInSlot?.id || generateUniqueId(),
                         chord: chordSymbol!,
+                        notes: usableChords[index].notes,
                     };
                 });
 

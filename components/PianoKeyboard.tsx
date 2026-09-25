@@ -30,9 +30,9 @@ export default function PianoKeyboard({
         return () => mq.removeEventListener("change", handler);
     }, []);
 
-    // Widened along with the note range: the keyboard now spans A1-C6 to cover
-    // everything the voicing engine can produce, which is 30 white keys rather
-    // than 15, and the old caps would have halved the key size.
+    // Widened along with the note range: the keyboard spans A1-C6 to cover
+    // every note a voicing may use, which is 30 white keys rather than 15, and
+    // the old caps would have halved the key size.
     const responsiveWidth = isMobile ? Math.min(window.innerWidth * 0.9, 320) : width;
 
     const handlePlayNote = (midiNumber: number) => {

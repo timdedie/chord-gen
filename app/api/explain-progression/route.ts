@@ -24,8 +24,7 @@ export const POST = aiRoute<RequestBody>('explain-progression', async ({ body })
         { role: 'user', content: buildExplainProgressionMessage(chords.join(' - '), prompt) },
     ];
 
-    // Streaming can't fall back mid-response, so this takes the head of the
-    // chain and streams it. A provider outage surfaces as a failed stream.
+    // A provider outage surfaces as a failed stream.
     const [spec] = modelChain('standard');
 
     const result = await streamText({
@@ -34,7 +33,7 @@ export const POST = aiRoute<RequestBody>('explain-progression', async ({ body })
         messages,
         temperature: 0.6,
         maxOutputTokens: 300,
-        providerOptions: providerOptions(spec),
+        providerOptions: providerOptions(),
     });
 
     return result.toTextStreamResponse();

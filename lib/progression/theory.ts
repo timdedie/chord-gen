@@ -288,7 +288,7 @@ export function transposeDoc(doc: ProgressionDoc, semitones: number): Progressio
             return {
                 ...slot,
                 symbol: canonical || slot.symbol,
-                bass: slot.bass ? Note.simplify(Note.transpose(slot.bass, interval)) : undefined,
+                notes: slot.notes.map((n) => Note.simplify(Note.transpose(n, interval)) || n),
             };
         }),
     };

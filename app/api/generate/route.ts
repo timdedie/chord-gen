@@ -1,16 +1,19 @@
 export const maxDuration = 30;
 
-import { createProgressionSchema, SingleChordSchema } from '@/lib/schemas';
+import { createProgressionSchema, VoicedChordSchema } from '@/lib/schemas';
 import { aiRoute, AiRouteError, generateStructured } from '@/lib/ai/gateway';
 import { CHORD_GENERATION_SYSTEM_PROMPT } from '@/lib/prompts/system';
-import { buildProgressionMessage, buildAddChordMessage, SimpleChordObject } from '@/lib/prompts/generate';
+import { buildProgressionMessage, buildAddChordMessage } from '@/lib/prompts/generate';
+import { parseVoicedChords } from '@/lib/prompts/format';
+import type { VoicedChord } from '@/lib/progression/types';
 import { GenerationRound, normalizeHistory } from '@/lib/prompts/history';
 import { cacheKey, readCache, writeCache } from '@/lib/ai/cache';
 import { clampChordCount } from '@/lib/prompts/chordCount';
 
 interface RequestBody {
     prompt?: string;
-    existingChords?: SimpleChordObject[];
+    /** The progression as it stands, each chord with its notes. */
+    existingChords?: unknown;
     addChordPosition?: number;
     numChords?: number;
     /**
@@ -22,7 +25,8 @@ interface RequestBody {
 }
 
 export const POST = aiRoute<RequestBody>('generate', async ({ body }) => {
-    const { prompt, existingChords = [], addChordPosition, numChords } = body;
+    const { prompt, addChordPosition, numChords } = body;
+    const existingChords = parseVoicedChords(body.existingChords);
 
     if (typeof addChordPosition === 'number') {
         const history = normalizeHistory(body.rounds);
@@ -30,7 +34,7 @@ export const POST = aiRoute<RequestBody>('generate', async ({ body }) => {
             task: 'generate:add-chord',
             userMessage: buildAddChordMessage(prompt, existingChords, addChordPosition, history),
             system: CHORD_GENERATION_SYSTEM_PROMPT,
-            schema: SingleChordSchema,
+            schema: VoicedChordSchema,
         });
     }
 
@@ -42,8 +46,8 @@ export const POST = aiRoute<RequestBody>('generate', async ({ body }) => {
 
     // A bare prompt with no session context always asks the same question, so
     // repeat requests for a popular prompt can share an answer.
-    const key = cacheKey(['generate', prompt, count]);
-    const cached = readCache<{ chords: string[] }>(key);
+    const key = cacheKey(['generate', 'voiced', prompt, count]);
+    const cached = readCache<{ chords: VoicedChord[] }>(key);
     if (cached) return cached;
 
     const result = await generateStructured({

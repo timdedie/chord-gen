@@ -67,7 +67,7 @@ Give the user three genuinely different angles on the prompt:
     return `
 Create 3 distinct ${numChords}-chord progressions for: "${prompt}"${historySection}
 
-These are *alternatives* the user picks between — they don't need to relate to each other. Each one stands on its own. The hard requirement: the chords *within* a single progression must flow coherently and sound intentional together.
+These are *alternatives* the user picks between — they don't need to relate to each other. Each one stands on its own. The hard requirement: the chords *within* a single progression must flow coherently and sound intentional together — in their harmony and in their voicings, which should lead smoothly from one chord to the next.
 
 ${directionSection}
 

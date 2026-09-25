@@ -1,15 +1,12 @@
 import MidiWriter from "midi-writer-js";
 import type { ProgressionDoc } from "./types";
-import { voiceSlots } from "./voicing";
 
 /**
  * MIDI export driven by the document model.
  *
- * The old exporter wrote every chord as a whole note stacked at octave 4,
- * regardless of what the app had just played. This writes what `voiceSlots`
- * resolves — the same notes as playback, voice leading included — at each
- * slot's real duration, and splits the bass onto its own track so it can be
- * routed separately in a DAW.
+ * Writes each slot's own notes — exactly what playback sounds — at the slot's
+ * real duration, and splits the bass (the lowest note) onto its own track so
+ * it can be routed separately in a DAW.
  */
 
 /** midi-writer-js uses 128 ticks per quarter note. */
@@ -38,10 +35,10 @@ export function buildMidi(
     bassTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 33 }));
 
     let wroteAnything = false;
-    const voiced = voiceSlots(doc.slots);
 
-    doc.slots.forEach((slot, index) => {
-        const { bass, voices, all } = voiced[index];
+    doc.slots.forEach((slot) => {
+        const [bass, ...voices] = slot.notes;
+        const all = slot.notes;
         const duration = beatsToTicks(slot.durationBeats);
 
         // Without a separate bass track the bass is folded into the chord.

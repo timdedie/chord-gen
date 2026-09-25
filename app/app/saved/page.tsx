@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePiano } from "@/components/PianoProvider";
 import { VOICED_RANGE } from "@/lib/progression/voicing";
+import { voicedChordsFromDoc } from "@/lib/progression/doc";
 
 const PianoKeyboard = dynamic(() => import("@/components/PianoKeyboard"), { ssr: false });
 const ChordColumnsContainer = dynamic(
@@ -31,8 +32,8 @@ export default function SavedPage() {
         setActiveNotes(notes);
     }, []);
 
-    // Sized from the voicing engine rather than restated here, so the two
-    // cannot drift apart — see VOICED_RANGE.
+    // Sized from the range voicings are validated against, so the two cannot
+    // drift apart — see VOICED_RANGE.
     const firstNote = MidiNumbers.fromNote(VOICED_RANGE.low);
     const lastNote = MidiNumbers.fromNote(VOICED_RANGE.high);
 
@@ -77,7 +78,7 @@ export default function SavedPage() {
                                 )}
                                 <ChordColumnsContainer
                                     id={progression.id}
-                                    initialChords={progression.chords}
+                                    initialChords={voicedChordsFromDoc(progression.doc)}
                                     style={progression.style}
                                     prompt={progression.prompt}
                                     onActiveNotesChange={handleActiveNotesChange}

@@ -14,7 +14,7 @@ pnpm lint         # Run ESLint
 
 **Stack**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui
 
-**AI Integration**: Vercel AI SDK with DeepSeek Chat (OpenAI-compatible API). Chord validation uses tonal.js `Chord.get()` to verify musical validity. Generation endpoints implement retry logic (up to 2 retries) when validation fails.
+**AI Integration**: Vercel AI SDK with DeepSeek Chat (OpenAI-compatible API). Chord validation uses tonal.js `Chord.get()` to verify musical validity. Generation endpoints retry once when validation fails, sending the validation errors back to the model; failures are logged and surfaced to the client, never patched up.
 
 ### Route Structure
 
@@ -37,8 +37,9 @@ pnpm lint         # Run ESLint
 1. User enters prompt on `/app` page
 2. Navigates to `/app/results?q=prompt&n=numChords`
 3. Results page calls `/api/generate-multiple`
-4. API validates chords with tonal.js, retries on failure
-5. Progressions displayed with interactive editing
+4. The LLM returns each chord as a symbol plus its exact notes (`{ symbol, notes }`); the API validates the symbol with tonal.js and the notes against the symbol (`validateVoicing` in `lib/progression/voicing.ts`), retrying with the errors on failure
+5. Playback and MIDI export play those notes as-is — there is no client-side voicing
+6. Progressions displayed with interactive editing
 
 ### Audio/MIDI
 
@@ -50,7 +51,7 @@ pnpm lint         # Run ESLint
 
 Required in `.env.local`:
 - `DEEPSEEK_API_KEY` - DeepSeek API key (primary LLM)
-- `GOOGLE_GENERATIVE_AI_API_KEY` - Google GenAI (optional)
+- `GOOGLE_GENERATIVE_AI_API_KEY` - Google GenAI (currently unused — every request runs on `deepseek-flash` with no fallback model)
 
 Optional (analytics — everything no-ops cleanly if unset):
 - `NEXT_PUBLIC_POSTHOG_KEY` - PostHog project API key
