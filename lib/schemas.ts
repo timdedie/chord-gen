@@ -30,13 +30,14 @@ export const ValidChordStringSchema = z.string()
 const voicedChordShape = {
     symbol: ValidChordStringSchema,
     notes: z.array(z.string())
-        .describe(`The exact notes to play, lowest first, in scientific pitch notation (C4 = middle C) — e.g. ["D2", "C4", "E4", "F4", "A4"]. The first note is the bass. ${MIN_VOICING_NOTES}-${MAX_VOICING_NOTES} notes between ${VOICED_RANGE.low} and ${VOICED_RANGE.high}.`),
+        .describe(`The exact notes to play, lowest first, in scientific pitch notation (C4 = middle C) — e.g. ["D2", "C4", "E4", "F4", "A4"]. The first note is the bass. Colour tones beyond the symbol are welcome. ${MIN_VOICING_NOTES}-${MAX_VOICING_NOTES} notes between ${VOICED_RANGE.low} and ${VOICED_RANGE.high}.`),
 };
 
 /**
- * Checks the notes against the (already repaired) symbol and swaps in their
- * canonical, ascending spelling. Runs after the symbol has parsed, so a bad
- * symbol is reported once rather than again as a voicing problem.
+ * Checks the notes are playable and swaps in their canonical, ascending
+ * spelling. They are deliberately not checked against the symbol — colour
+ * tones beyond it are the model's to add. Runs after the symbol has parsed, so
+ * a bad symbol is reported once rather than again as a voicing problem.
  */
 function withValidVoicing<T extends { symbol: string; notes: string[] }>(chord: T, ctx: z.RefinementCtx): T {
     const result = validateVoicing(chord.symbol, chord.notes);

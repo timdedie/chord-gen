@@ -9,5 +9,5 @@ export function buildValidationErrorMessage(issues: ZodIssue[]): string {
     return `Your response was rejected. Fix these problems and return the complete response again:
 ${lines.join('\n')}
 
-Every chord symbol must be musically valid, and every chord's notes must spell exactly that chord — lowest note on the bass, only chord tones, nothing essential left out.`;
+Every chord symbol must be musically valid, and every note must be written like "F#3" and sit between A1 and C7.`;
 }

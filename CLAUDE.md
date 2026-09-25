@@ -37,7 +37,7 @@ pnpm lint         # Run ESLint
 1. User enters prompt on `/app` page
 2. Navigates to `/app/results?q=prompt&n=numChords`
 3. Results page calls `/api/generate-multiple`
-4. The LLM returns each chord as a symbol plus its exact notes (`{ symbol, notes }`); the API validates the symbol with tonal.js and the notes against the symbol (`validateVoicing` in `lib/progression/voicing.ts`), retrying with the errors on failure
+4. The LLM returns each chord as a symbol plus its exact notes (`{ symbol, notes }`); the API validates the symbol with tonal.js, and checks only that the notes are playable (`validateVoicing` in `lib/progression/voicing.ts`) — colour tones beyond the symbol are intentional. Failures are retried once with the errors
 5. Playback and MIDI export play those notes as-is — there is no client-side voicing
 6. Progressions displayed with interactive editing
 

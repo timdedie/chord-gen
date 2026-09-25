@@ -9,9 +9,10 @@ import { validateVoicing } from "./voicing";
 import { VoicedChordSchema } from "../schemas";
 
 /**
- * Voicings come from the model now, so the thing to verify is the gate: good
- * voicings pass untouched, and every way a voicing can disagree with its
- * symbol is caught with a message the model can act on.
+ * Voicings come from the model now, with full musical freedom, so the thing to
+ * verify is the gate: anything playable passes untouched — colour tones
+ * included — and anything unplayable is caught with a message the model can
+ * act on.
  */
 
 const ok = (symbol: string, notes: string[]) => {
@@ -39,6 +40,18 @@ test("idiomatic voicings pass", () => {
     ok("Bm7b5", ["B1", "A3", "D4", "F4"]);
 });
 
+test("colour tones beyond the symbol are the model's call", () => {
+    // A 9th on a plain m7 and maj7 — what a player adds without being told.
+    ok("Dm7", ["D2", "C4", "E4", "F4", "A4"]);
+    ok("Fmaj7", ["F2", "E3", "G3", "A3", "C4"]);
+    // Rootless, 3rd-less, or a non-root bass: all voicing decisions, not errors.
+    ok("Cmaj7", ["C2", "G3", "B3", "D4"]);
+    ok("Cmaj7", ["E2", "B3", "D4", "G4"]);
+    ok("C", ["C2", "G2"]);
+    // High top voices, which C6 used to reject.
+    ok("Cm9", ["C2", "Bb3", "Eb4", "G4", "D6"]);
+});
+
 test("notes come back sorted, deduplicated and plainly spelled", () => {
     assert.deepEqual(ok("Cmaj7", ["E4", "C2", "B3", "E4", "G3"]), ["C2", "G3", "B3", "E4"]);
     // Cb and E# would never light a key; the pitch is kept, the spelling is not.
@@ -47,32 +60,25 @@ test("notes come back sorted, deduplicated and plainly spelled", () => {
     assert.deepEqual(ok("Am", ["a2", "c4", "e4"]), ["A2", "C4", "E4"]);
 });
 
-test("each kind of mismatch is caught and explained", () => {
-    rejected("Cmaj7", ["C2", "E3", "G3", "B3", "D4"], /D4 is not in the chord/);
-    rejected("Cmaj7", ["E2", "C3", "G3", "B3"], /lowest note must be the bass, C.*Cmaj7\/E/);
-    rejected("Cmaj7", ["C2", "G3", "B3", "C4"], /missing E/);
-    rejected("Cmaj7", ["C2", "E3", "G3", "C4"], /missing B/);
-    rejected("C7b9", ["C2", "E3", "G3", "Bb3"], /missing Db/);
-    rejected("Cmaj9", ["C2", "E3", "G3", "B3"], /missing D/);
-    rejected("Cm7b5", ["C2", "Eb3", "Bb3", "C4"], /missing Gb/);
-    // A slash chord still has to contain its root.
-    rejected("C/E", ["E2", "G3", "E4"], /missing C/);
-    rejected("C", ["C2", "E3"], /3-8 different notes/);
+test("unplayable voicings are caught and explained", () => {
+    rejected("C", ["C2"], /2-10 different notes/);
+    rejected("C", ["C2", "C2"], /2-10 different notes/);
     rejected("C", ["C1", "E3", "G3"], /outside the playable range/);
+    rejected("C", ["C2", "E3", "D7"], /outside the playable range/);
     rejected("C", ["C2", "E3", "G"], /"G" is not a pitched note/);
     rejected("C", ["C2", "E3", "H3"], /not a pitched note/);
 });
 
-test("the schema repairs the symbol, then checks the notes against it", () => {
+test("the schema repairs the symbol, then checks the notes", () => {
     const parsed = VoicedChordSchema.safeParse({ symbol: "C△7", notes: ["C2", "B3", "E4", "G4"] });
     assert.ok(parsed.success);
     assert.equal(parsed.data.symbol, "Cmaj7");
     assert.deepEqual(parsed.data.notes, ["C2", "B3", "E4", "G4"]);
 
-    const bad = VoicedChordSchema.safeParse({ symbol: "Cmaj7", notes: ["C2", "Bb3", "E4"] });
+    const bad = VoicedChordSchema.safeParse({ symbol: "Cmaj7", notes: ["C2", "B3", "E"] });
     assert.ok(!bad.success);
     assert.deepEqual(bad.error.issues[0].path, ["notes"]);
-    assert.match(bad.error.issues[0].message, /Bb3 is not in the chord/);
+    assert.match(bad.error.issues[0].message, /"E" is not a pitched note/);
 
     // The output parses again unchanged, so re-validation downstream is safe.
     const again = VoicedChordSchema.safeParse(parsed.data);
@@ -94,7 +100,7 @@ test("saved docs keep their notes, and nothing invents notes for older ones", ()
 
     // Tampered notes do not survive a round trip.
     const tampered = JSON.parse(JSON.stringify(doc));
-    tampered.slots[0].notes = ["D2", "Db4", "F4"];
+    tampered.slots[0].notes = ["D2", "not-a-note", "F4"];
     assert.deepEqual(normalizeDoc(tampered).slots[0].notes, []);
 
     // Earlier versions had no notes at all.
