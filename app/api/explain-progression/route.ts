@@ -2,7 +2,7 @@ export const maxDuration = 30;
 
 import { streamText, type ModelMessage } from 'ai';
 import { aiRoute, AiRouteError } from '@/lib/ai/gateway';
-import { modelChain, providerOptions, resolveModel } from '@/lib/ai/models';
+import { model, providerOptions } from '@/lib/ai/models';
 import {
     EXPLAIN_PROGRESSION_SYSTEM_PROMPT,
     buildExplainProgressionMessage,
@@ -25,10 +25,8 @@ export const POST = aiRoute<RequestBody>('explain-progression', async ({ body })
     ];
 
     // A provider outage surfaces as a failed stream.
-    const [spec] = modelChain('standard');
-
     const result = await streamText({
-        model: resolveModel(spec),
+        model: model(),
         system: EXPLAIN_PROGRESSION_SYSTEM_PROMPT,
         messages,
         temperature: 0.6,

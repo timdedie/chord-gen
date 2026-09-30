@@ -7,13 +7,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import PromptBar from "@/components/PromptBar";
 import { useExamplePrompts } from "@/hooks/useExamplePrompts";
-import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
 import { usePiano } from "@/components/PianoProvider";
 export default function AppPage() {
     const router = useRouter();
     const { randomExamples } = useExamplePrompts();
     const { loadSamples, resumeAudio } = usePiano();
-    const premium = usePremiumGeneration();
 
     const [prompt, setPrompt] = useState("");
     const [numChords, setNumChords] = useState(4);
@@ -33,9 +31,8 @@ export default function AppPage() {
         const params = new URLSearchParams();
         params.set("q", prompt);
         params.set("n", String(numChords));
-        if (premium.enabled) params.set("premium", "1");
         router.push(`/app/results?${params.toString()}`);
-    }, [prompt, numChords, router, loadSamples, resumeAudio, premium.enabled]);
+    }, [prompt, numChords, router, loadSamples, resumeAudio]);
 
     const handleExampleClick = useCallback((example: string) => {
         void resumeAudio();
@@ -86,13 +83,6 @@ export default function AppPage() {
                         autoFocus
                         size="lg"
                         className="mb-6"
-                        premium={{
-                            isSignedIn: premium.isSignedIn,
-                            available: premium.available,
-                            loading: premium.loading,
-                            enabled: premium.enabled,
-                            onToggle: premium.toggle,
-                        }}
                     />
 
                     {/* Example prompts */}

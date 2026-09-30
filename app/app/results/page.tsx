@@ -14,7 +14,6 @@ import { usePiano } from "@/components/PianoProvider";
 import ThinkingMessages from "@/components/ThinkingMessages";
 import ProgressionSkeleton from "@/components/ChordColumns/ProgressionSkeleton";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
-import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 import { reportAiFailure } from "@/lib/ai/reportFailure";
 import { VOICED_RANGE, type VoicedChord } from "@/lib/progression/voicing";
@@ -42,8 +41,6 @@ function ResultsContent() {
     const router = useRouter();
     const { loadSamples } = usePiano();
     const { isSaved, toggleSave, isSignedIn: isSavedSignedIn } = useSavedProgressions();
-    const premium = usePremiumGeneration();
-    const { consume: consumePremium, refresh: refreshPremium } = premium;
 
     const [prompt, setPrompt] = useState("");
     const [numChords, setNumChords] = useState(4);
@@ -77,7 +74,7 @@ function ResultsContent() {
         loadSamples();
     }, [loadSamples]);
 
-    const generateProgressions = useCallback(async (queryPrompt: string, queryNumChords: number, usePremium: boolean = false) => {
+    const generateProgressions = useCallback(async (queryPrompt: string, queryNumChords: number) => {
         if (!queryPrompt.trim()) return;
 
         setIsLoading(true);
@@ -85,7 +82,6 @@ function ResultsContent() {
 
         capture(AnalyticsEvent.GenerationRequested, {
             num_chords: queryNumChords,
-            premium: usePremium,
             prompt_length: queryPrompt.length,
         });
 
@@ -96,7 +92,6 @@ function ResultsContent() {
                 body: JSON.stringify({
                     prompt: queryPrompt,
                     numChords: queryNumChords,
-                    premium: usePremium,
                 }),
             });
 
@@ -107,7 +102,6 @@ function ResultsContent() {
                 capture(AnalyticsEvent.GenerationFailed, {
                     status: res.status,
                     error: data.error ?? "unknown",
-                    premium: usePremium,
                 });
                 setIsLoading(false);
                 return;
@@ -118,24 +112,15 @@ function ResultsContent() {
             if (typeof data.numChords === "number" && data.numChords >= 2 && data.numChords <= 8) {
                 setNumChords(data.numChords);
             }
-
-            if (usePremium) {
-                if (data.premiumUsed && !data.unlimitedPremium) {
-                    consumePremium();
-                } else {
-                    refreshPremium();
-                }
-            }
         } catch (err) {
             console.error("Network error:", err);
             capture(AnalyticsEvent.GenerationFailed, {
                 error: "network_error",
-                premium: usePremium,
             });
         }
 
         setIsLoading(false);
-    }, [consumePremium, refreshPremium]);
+    }, []);
 
     // Load from URL params on mount
     useEffect(() => {
@@ -156,8 +141,7 @@ function ResultsContent() {
         // If we have a query and haven't generated yet, generate
         if (q && !hasInitialized) {
             setHasInitialized(true);
-            const usePremium = searchParams.get("premium") === "1";
-            generateProgressions(q, n ? parseInt(n, 10) : 4, usePremium);
+            generateProgressions(q, n ? parseInt(n, 10) : 4);
         }
     }, [searchParams, hasInitialized, generateProgressions]);
 
@@ -255,11 +239,10 @@ function ResultsContent() {
         const params = new URLSearchParams();
         params.set("q", prompt);
         params.set("n", String(numChords));
-        if (premium.enabled) params.set("premium", "1");
         router.push(`/app/results?${params.toString()}`);
 
-        generateProgressions(prompt, numChords, premium.enabled);
-    }, [prompt, numChords, router, generateProgressions, premium.enabled]);
+        generateProgressions(prompt, numChords);
+    }, [prompt, numChords, router, generateProgressions]);
 
     const handleNumChordsChange = useCallback((value: number) => {
         setNumChords(value);
@@ -286,11 +269,6 @@ function ResultsContent() {
                 onNumChordsChange={handleNumChordsChange}
                 onGenerate={handleGenerate}
                 isLoading={isLoading}
-                premiumSignedIn={premium.isSignedIn}
-                premiumAvailable={premium.available}
-                premiumLoading={premium.loading}
-                premiumEnabled={premium.enabled}
-                onPremiumToggle={premium.toggle}
             />
 
             <main className="container max-w-6xl mx-auto px-4 pt-36 pb-48">

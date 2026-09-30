@@ -63,7 +63,7 @@ Optional (analytics — everything no-ops cleanly if unset):
 
 - Client init/identify lives in `components/providers/PostHogProvider.tsx` (mounted in `app/layout.tsx`). Uses `person_profiles: 'identified_only'`, manual SPA `$pageview` capture, and ties identity to Clerk (`identify` on sign-in with `role`, `reset` on sign-out).
 - Client events go through the typed `capture()` helper + `AnalyticsEvent` catalog in `lib/analytics/events.ts`.
-- Server events use `captureServer()` in `lib/analytics/posthog-server.ts` (direct `fetch` to PostHog — edge-runtime safe). `generate-multiple` fires `generation_succeeded` with model/role/premium context, keyed on the Clerk userId so it joins the same person as client events.
+- Server events use `captureServer()` in `lib/analytics/posthog-server.ts` (direct `fetch` to PostHog — edge-runtime safe). `generate-multiple` fires `generation_succeeded` with model/role context, keyed on the Clerk userId so it joins the same person as client events.
 
 ## Conventions
 

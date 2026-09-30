@@ -5,9 +5,9 @@ import { generateObject, NoObjectGeneratedError, TypeValidationError, type Model
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
 import { checkRateLimit } from "@/lib/rateLimit";
-import { getUserRole, type UserRole } from "@/lib/premium";
+import { getUserRole, type UserRole } from "@/lib/roles";
 import { buildValidationErrorMessage } from "@/lib/prompts/retry";
-import { modelChain, providerOptions, resolveModel, type Tier } from "./models";
+import { MODEL_ID, model, providerOptions } from "./models";
 
 /**
  * The single entry point for every AI route.
@@ -91,7 +91,6 @@ interface GenerateOptions<TSchema extends z.ZodTypeAny> {
     system: string;
     schema: TSchema;
     temperature?: number;
-    tier?: Tier;
 }
 
 /** How many times to re-ask the model after a response fails validation. */
@@ -120,9 +119,9 @@ function rejectedOutput(error: unknown): unknown {
  *
  * Chord symbols are repaired deterministically inside the schema before
  * validation runs (see `lib/ai/repair.ts`), so the common near-miss spellings
- * never reach this loop. What does reach it — mostly voicings whose notes do
- * not match their symbol — is logged, then sent back to the model with the
- * reasons. Nothing is patched up or partially returned: a response that is
+ * never reach this loop. What does reach it — an unparseable note, a note out
+ * of range, the wrong number of chords — is logged, then sent back to the
+ * model with the reasons. Nothing is patched up or partially returned: a response that is
  * still invalid after the retry fails the request, with every reason attached.
  */
 export async function generateStructured<TSchema extends z.ZodTypeAny>({
@@ -131,55 +130,45 @@ export async function generateStructured<TSchema extends z.ZodTypeAny>({
     system,
     schema,
     temperature = 1.0,
-    tier = "standard",
 }: GenerateOptions<TSchema>): Promise<z.infer<TSchema>> {
-    const chain = modelChain(tier);
     const failures: Array<{ model: string; attempt: number; error: string }> = [];
+    const messages: ModelMessage[] = [{ role: "user", content: userMessage }];
 
-    for (const spec of chain) {
-        const messages: ModelMessage[] = [{ role: "user", content: userMessage }];
-
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-            try {
-                const { object } = await generateObject({
-                    model: resolveModel(spec),
-                    schema,
-                    system,
-                    messages,
-                    temperature,
-                    providerOptions: providerOptions(),
-                });
-                return object as z.infer<TSchema>;
-            } catch (error) {
-                const raw = rejectedOutput(error);
-                if (raw === undefined) {
-                    const message = error instanceof Error ? error.message : String(error);
-                    failures.push({ model: spec.id, attempt: attempt + 1, error: message });
-                    // A provider-level failure will not improve on retry.
-                    break;
-                }
-
-                const parsed = schema.safeParse(raw);
-                if (parsed.success) return parsed.data;
-
-                const reasons = parsed.error.issues.map((i) => i.message);
-                console.warn(
-                    `[ai:${task}] ${spec.id} attempt ${attempt + 1} rejected:\n  ${reasons.join("\n  ")}`,
-                );
-                failures.push({ model: spec.id, attempt: attempt + 1, error: reasons.join(" | ") });
-
-                messages.push(
-                    { role: "assistant", content: JSON.stringify(raw) },
-                    { role: "user", content: buildValidationErrorMessage(parsed.error.issues) },
-                );
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+        try {
+            const { object } = await generateObject({
+                model: model(),
+                schema,
+                system,
+                messages,
+                temperature,
+                providerOptions: providerOptions(),
+            });
+            return object as z.infer<TSchema>;
+        } catch (error) {
+            const raw = rejectedOutput(error);
+            if (raw === undefined) {
+                const message = error instanceof Error ? error.message : String(error);
+                failures.push({ model: MODEL_ID, attempt: attempt + 1, error: message });
+                // A provider-level failure will not improve on retry.
+                break;
             }
+
+            const parsed = schema.safeParse(raw);
+            if (parsed.success) return parsed.data;
+
+            const reasons = parsed.error.issues.map((i) => i.message);
+            console.warn(
+                `[ai:${task}] ${MODEL_ID} attempt ${attempt + 1} rejected:\n  ${reasons.join("\n  ")}`,
+            );
+            failures.push({ model: MODEL_ID, attempt: attempt + 1, error: reasons.join(" | ") });
+
+            messages.push(
+                { role: "assistant", content: JSON.stringify(raw) },
+                { role: "user", content: buildValidationErrorMessage(parsed.error.issues) },
+            );
         }
     }
 
     throw new AiRouteError(`Generation failed for ${task}.`, 502, { failures });
-}
-
-/** Chooses the model tier, without granting premium to anyone not entitled to it. */
-export function tierFor(premiumGranted: boolean): Tier {
-    return premiumGranted ? "premium" : "standard";
 }

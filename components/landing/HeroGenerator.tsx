@@ -11,9 +11,7 @@ import { useExamplePrompts } from "@/hooks/useExamplePrompts";
  * The real generator entry point on the marketing homepage.
  *
  * Deliberately does NOT use `usePiano` — PianoProvider only wraps /app via
- * AppShell, and the results page loads samples itself on mount. Premium is
- * likewise omitted here to keep the hero uncluttered for signed-out visitors;
- * the toggle is available on the results page via SearchHeader.
+ * AppShell, and the results page loads samples itself on mount.
  */
 export default function HeroGenerator() {
     const router = useRouter();

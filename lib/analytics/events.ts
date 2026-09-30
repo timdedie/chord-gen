@@ -7,7 +7,7 @@ import posthog from "posthog-js";
  * map prevents typos and drift between call sites, and documents the funnel:
  *
  *   generate → activate (play / explain / edit) → value (MIDI export)
- *            → gate (paywall) → convert (signup) → support (paypal / premium)
+ *            → convert (signup) → support (paypal)
  *
  * Client events flow through `capture()` below. Server-side events live in
  * `lib/analytics/posthog-server.ts` and use the same string names so they line
@@ -25,9 +25,6 @@ export const AnalyticsEvent = {
     ProgressionExplained: "progression_explained",
     ProgressionEdited: "progression_edited",
     MidiExported: "midi_exported",
-
-    // Funnel: premium
-    PremiumToggled: "premium_toggled",
 
     // Funnel: conversion / support (monetization is signup + PayPal donations)
     SignupCompleted: "signup_completed",

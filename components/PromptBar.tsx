@@ -5,16 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import NumChordsSelector from "@/components/NumChordsSelector";
-import PremiumToggle from "@/components/PremiumToggle";
 import { cn } from "@/lib/utils";
-
-export interface PromptBarPremium {
-    isSignedIn: boolean;
-    available: boolean;
-    loading: boolean;
-    enabled: boolean;
-    onToggle: () => void;
-}
 
 interface PromptBarProps {
     prompt: string;
@@ -24,8 +15,6 @@ interface PromptBarProps {
     onSubmit: () => void;
     disabled?: boolean;
     autoFocus?: boolean;
-    /** Omit to hide the premium toggle (e.g. the marketing hero). */
-    premium?: PromptBarPremium;
     /** "lg" for the full-page entry points, "md" for the persistent results toolbar. */
     size?: "lg" | "md";
     /**
@@ -50,7 +39,6 @@ export default function PromptBar({
     onSubmit,
     disabled = false,
     autoFocus = false,
-    premium,
     size = "lg",
     elevated = false,
     className,
@@ -98,17 +86,6 @@ export default function PromptBar({
                     compact
                 />
             </div>
-
-            {premium && (
-                <PremiumToggle
-                    isSignedIn={premium.isSignedIn}
-                    available={premium.available}
-                    loading={premium.loading}
-                    enabled={premium.enabled}
-                    onToggle={premium.onToggle}
-                    disabled={disabled}
-                />
-            )}
 
             <Button
                 onClick={onSubmit}

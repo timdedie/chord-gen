@@ -11,7 +11,8 @@ import { MAX_VOICING_NOTES, MIN_VOICING_NOTES, VOICED_RANGE, validateVoicing } f
  * the same chord never appears three ways in one progression. This used to be
  * an ad-hoc trim-and-strip inline here, and everything it could not handle cost
  * a full regeneration round trip. Only genuinely unrecognisable symbols now
- * reach the model again.
+ * reach the model again. Every repair is logged, so how often the model gets a
+ * spelling wrong stays visible.
  */
 export const ValidChordStringSchema = z.string()
     .describe("A chord symbol (e.g. F#m7, Cmaj7/E, Bbm)")
@@ -24,6 +25,7 @@ export const ValidChordStringSchema = z.string()
             });
             return z.NEVER;
         }
+        if (repaired !== raw.trim()) console.info(`[repair] "${raw}" → "${repaired}"`);
         return repaired;
     });
 

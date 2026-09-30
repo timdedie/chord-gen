@@ -1,14 +1,6 @@
-import { sql } from 'drizzle-orm';
-import { db } from '@/lib/db';
-import { premiumGenerations } from '@/lib/db/schema';
 import { createMultipleProgressionsSchema } from '@/lib/schemas';
-import { aiRoute, AiRouteError, generateStructured, tierFor } from '@/lib/ai/gateway';
-import {
-    FREE_PREMIUM_GENERATIONS_PER_DAY,
-    PRO_PREMIUM_GENERATIONS_PER_DAY,
-    PREMIUM_MODEL_ID,
-    STANDARD_MODEL_ID,
-} from '@/lib/ai/models';
+import { aiRoute, AiRouteError, generateStructured } from '@/lib/ai/gateway';
+import { MODEL_ID } from '@/lib/ai/models';
 import { CHORD_GENERATION_SYSTEM_PROMPT } from '@/lib/prompts/system';
 import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multiple';
 import { GenerationRound, normalizeHistory, sanitizeFeedback } from '@/lib/prompts/history';
@@ -26,7 +18,6 @@ interface RequestBody {
     rounds?: GenerationRound[];
     /** Feedback the user gave on everything generated so far, driving this round. */
     feedback?: string;
-    premium?: boolean;
 }
 
 interface Progression {
@@ -62,42 +53,12 @@ function resultChordCount(progressions: { chords: unknown[] }[], fallback: numbe
     return best;
 }
 
-function todayDate(): string {
-    return new Date().toISOString().slice(0, 10);
-}
-
-/** Atomically claims one of today's premium generation slots for a user. Returns true if claimed. */
-async function claimPremiumSlot(userId: string, limit: number): Promise<boolean> {
-    const rows = await db
-        .insert(premiumGenerations)
-        .values({ userId, date: todayDate(), count: 1 })
-        .onConflictDoUpdate({
-            target: [premiumGenerations.userId, premiumGenerations.date],
-            set: { count: sql`${premiumGenerations.count} + 1` },
-            where: sql`${premiumGenerations.count} < ${limit}`,
-        })
-        .returning();
-
-    return rows.length > 0;
-}
-
 export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, userId, role }) => {
-    const { prompt, numChords, premium } = body;
+    const { prompt, numChords } = body;
     const history = normalizeHistory(body.rounds);
     const feedback = sanitizeFeedback(body.feedback);
 
     if (!prompt) throw new AiRouteError('Prompt is required.', 400);
-
-    let premiumGranted = false;
-    const unlimitedPremium = role === 'admin';
-    if (premium) {
-        if (unlimitedPremium) {
-            premiumGranted = true;
-        } else if (userId) {
-            const limit = role === 'pro' ? PRO_PREMIUM_GENERATIONS_PER_DAY : FREE_PREMIUM_GENERATIONS_PER_DAY;
-            premiumGranted = await claimPremiumSlot(userId, limit);
-        }
-    }
 
     const requestedCount = clampChordCount(numChords ?? 4);
     // Feedback can ask for a different length ("make it 6 chords"). Honour it in
@@ -106,15 +67,11 @@ export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, use
     // validation on every retry.
     const previousCount = currentChordCount(history, requestedCount);
     const count = feedback ? resolveChordCount(feedback, previousCount) : requestedCount;
-    const modelId = premiumGranted ? PREMIUM_MODEL_ID : STANDARD_MODEL_ID;
 
     // Only a first round with no feedback is shareable — anything else belongs
-    // to one user's session. Premium requests are excluded on both counts: the
-    // slot is claimed above, so serving a cached result would charge a
-    // generation the user never got, and someone spending one expects a fresh
-    // answer rather than a neighbour's.
-    const cacheable = history.length === 0 && !feedback && !premium;
-    const key = cacheKey(['generate-multiple', 'voiced', prompt, count, modelId]);
+    // to one user's session.
+    const cacheable = history.length === 0 && !feedback;
+    const key = cacheKey(['generate-multiple', 'voiced', prompt, count, MODEL_ID]);
 
     const result = (cacheable && readCache<{ progressions: Progression[] }>(key)) || await generateStructured({
         task: 'generate-multiple',
@@ -128,7 +85,6 @@ export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, use
         system: CHORD_GENERATION_SYSTEM_PROMPT,
         schema: createMultipleProgressionsSchema(count, { allowLengthChange: !!feedback }),
         temperature: 1.2,
-        tier: tierFor(premiumGranted),
     });
 
     if (cacheable) writeCache(key, result);
@@ -142,17 +98,15 @@ export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, use
     const finalCount = resultChordCount(progressionsWithIds, count);
 
     // Server-side truth for the funnel: fires even when client events are
-    // blocked by adblock, and carries server-only context (model, role, whether
-    // a premium slot was actually granted). distinct_id matches the Clerk
+    // blocked by adblock, and carries server-only context (model, role).
+    // distinct_id matches the Clerk
     // userId we identify on the client; anonymous users get a stable guest
     // bucket so the event still lands in the funnel.
     await captureServer('generation_succeeded', userId ?? 'anonymous', {
         num_chords: finalCount,
         requested_num_chords: requestedCount,
         chord_count_changed: finalCount !== previousCount,
-        model: modelId,
-        premium_requested: !!premium,
-        premium_granted: premiumGranted,
+        model: MODEL_ID,
         role,
         is_generate_more: history.length > 0,
         has_feedback: !!feedback,
@@ -167,7 +121,5 @@ export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, use
     return {
         progressions: progressionsWithIds,
         numChords: finalCount,
-        premiumUsed: premiumGranted,
-        unlimitedPremium,
     };
 });
