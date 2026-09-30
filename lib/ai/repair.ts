@@ -195,29 +195,3 @@ export function repairChordSymbol(raw: string): string | null {
 
     return truncateSuffix(current);
 }
-
-export interface RepairReport {
-    /** The chords that survived, canonicalised. */
-    chords: string[];
-    /** Symbols that needed repair, as `[before, after]`. */
-    repaired: Array<[string, string]>;
-    /** Symbols that could not be salvaged and were dropped. */
-    dropped: string[];
-}
-
-/** Repair a whole progression, reporting what changed. */
-export function repairProgression(symbols: string[]): RepairReport {
-    const report: RepairReport = { chords: [], repaired: [], dropped: [] };
-
-    for (const symbol of symbols) {
-        const fixed = repairChordSymbol(symbol);
-        if (!fixed) {
-            report.dropped.push(symbol);
-            continue;
-        }
-        if (fixed !== symbol.trim()) report.repaired.push([symbol, fixed]);
-        report.chords.push(fixed);
-    }
-
-    return report;
-}

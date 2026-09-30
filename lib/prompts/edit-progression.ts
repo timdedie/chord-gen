@@ -1,4 +1,4 @@
-import type { VoicedChord } from '@/lib/progression/types';
+import type { VoicedChord } from '@/lib/progression/voicing';
 import { formatVoicedProgression } from './format';
 
 export function buildEditProgressionMessage(chords: VoicedChord[], feedback: string, prompt?: string): string {

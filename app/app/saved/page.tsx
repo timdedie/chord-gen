@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePiano } from "@/components/PianoProvider";
 import { VOICED_RANGE } from "@/lib/progression/voicing";
-import { voicedChordsFromDoc } from "@/lib/progression/doc";
 
 const PianoKeyboard = dynamic(() => import("@/components/PianoKeyboard"), { ssr: false });
 const ChordColumnsContainer = dynamic(
@@ -78,7 +77,7 @@ export default function SavedPage() {
                                 )}
                                 <ChordColumnsContainer
                                     id={progression.id}
-                                    initialChords={voicedChordsFromDoc(progression.doc)}
+                                    initialChords={progression.chords}
                                     style={progression.style}
                                     prompt={progression.prompt}
                                     onActiveNotesChange={handleActiveNotesChange}

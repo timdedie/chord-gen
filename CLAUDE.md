@@ -21,16 +21,19 @@ pnpm lint         # Run ESLint
 - `app/(marketing)/` - Landing page (route group)
 - `app/app/` - Main application interface
 - `app/app/results/` - Chord progression display/editing
-- `app/api/generate/` - Single chord/progression generation
+- `app/api/generate/` - Generates one chord to insert into a progression
+- `app/api/replace-chord/` - Three alternatives for one chord
+- `app/api/edit-progression/` - Revises a progression from user feedback
 - `app/api/generate-multiple/` - Generates 3 progression variations with style labels
 - `app/api/explain-progression/` - Progression analysis
 
 ### Key Components
 
-- `ProgressionCard.tsx` - Main progression display with editing, playback, drag-and-drop
+- `ChordColumns/ChordColumnsContainer.tsx` - Main progression display with editing, playback, drag-and-drop
 - `PianoKeyboard.tsx` + `PianoProvider.tsx` - Interactive piano with Tone.js audio
-- `useChordManagement.ts` - Hook managing chord generation, editing, and state
 - `lib/schemas.ts` - Zod schemas for AI response validation
+- `lib/progression/voicing.ts` - The `VoicedChord` type (`{ symbol, notes }`), the playability check, and reading stored chords
+- `lib/progression/midi.ts` - MIDI export: one bar per chord at 90 BPM, bass on its own track
 
 ### Data Flow
 

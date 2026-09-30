@@ -1,24 +1,6 @@
-import type { VoicedChord } from '@/lib/progression/types';
+import type { VoicedChord } from '@/lib/progression/voicing';
 import { type GenerationRound, collectFeedback, formatRounds } from './history';
 import { formatVoicedProgression } from './format';
-
-export function buildProgressionMessage(prompt: string, numChords: number): string {
-    return `
-Create a ${numChords}-chord progression: "${prompt}"
-
-Make it distinctive — not a stock pattern. Think about what emotional arc these ${numChords} chords should create, and choose each chord with intention.
-
-Consider as options (not obligations):
-- Slash chords for stepwise bass movement
-- Modal interchange or secondary dominants for color
-- Diminished or half-diminished passing chords
-- A mix of simple and rich chords — not all triads, not all extensions
-
-Voice the chords as one progression: each chord's notes should lead smoothly out of the one before.
-
-If the prompt is simple (e.g. "happy pop"), lean simpler but still avoid the obvious. If it suggests complexity (e.g. "dark jazz"), be more adventurous.
-  `.trim();
-}
 
 /**
  * Everything the user has been shown this session, plus the notes they gave

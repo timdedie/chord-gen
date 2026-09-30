@@ -1,4 +1,4 @@
-import type { VoicedChord } from '@/lib/progression/types';
+import type { VoicedChord } from '@/lib/progression/voicing';
 
 /**
  * How a voiced chord reads inside a prompt: `Dm9 [D2 C4 E4 F4 A4]`. The notes

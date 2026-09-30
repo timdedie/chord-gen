@@ -15,14 +15,12 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { ChordItem } from "@/hooks/useChordManagement";
 import type { GenerationRound } from "@/lib/prompts/history";
 import { ColumnsSkeleton } from "./ProgressionSkeleton";
 import { Chord } from "tonal";
 import { now as toneNow, type Sampler } from "tone";
 import { usePiano } from "@/components/PianoProvider";
-import { docFromChords } from "@/lib/progression/doc";
-import type { VoicedChord } from "@/lib/progression/types";
+import type { VoicedChord } from "@/lib/progression/voicing";
 import { generateChordColors } from "@/lib/chordColors";
 import { reportAiFailure } from "@/lib/ai/reportFailure";
 import { useTheme } from "next-themes";
@@ -33,6 +31,13 @@ import ColumnToolbar from "./ColumnToolbar";
 
 const generateUniqueId = () =>
   `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+interface ChordItem {
+  id: string;
+  chord: string;
+  /** The exact notes to play, lowest (the bass) first — chosen by the model. */
+  notes: string[];
+}
 
 const EMPTY_CHORDS: ChordItem[] = [];
 
@@ -161,10 +166,6 @@ export default function ChordColumnsContainer({
   const voicedChords = useMemo<VoicedChord[]>(
     () => chords.map((c) => ({ symbol: c.chord, notes: c.notes })),
     [chords]
-  );
-  const exportDoc = useMemo(
-    () => docFromChords(voicedChords.filter((c) => c.notes.length > 0), { prompt, style }),
-    [voicedChords, prompt, style]
   );
 
   // Generate colors based on current chords
@@ -713,8 +714,7 @@ export default function ChordColumnsContainer({
     <div className="w-full rounded-3xl overflow-hidden border border-border/50 bg-card/50">
       <ColumnToolbar
         style={style}
-        chords={chords.map((c) => c.chord)}
-        doc={exportDoc}
+        chords={voicedChords}
         prompt={prompt}
         isPlaying={isPlaying}
         onTogglePlayPause={handleTogglePlayPause}

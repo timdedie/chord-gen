@@ -17,8 +17,7 @@ import { useSavedProgressions } from "@/hooks/useSavedProgressions";
 import { usePremiumGeneration } from "@/hooks/usePremiumGeneration";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 import { reportAiFailure } from "@/lib/ai/reportFailure";
-import { VOICED_RANGE } from "@/lib/progression/voicing";
-import type { VoicedChord } from "@/lib/progression/types";
+import { VOICED_RANGE, type VoicedChord } from "@/lib/progression/voicing";
 
 interface ProgressionData {
     id: string;

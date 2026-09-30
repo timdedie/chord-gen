@@ -1,70 +1,48 @@
 import MidiWriter from "midi-writer-js";
-import type { ProgressionDoc } from "./types";
+import type { VoicedChord } from "./voicing";
 
 /**
- * MIDI export driven by the document model.
- *
- * Writes each slot's own notes — exactly what playback sounds — at the slot's
- * real duration, and splits the bass (the lowest note) onto its own track so
- * it can be routed separately in a DAW.
+ * MIDI export: each chord's own notes — exactly what playback sounds — one bar
+ * each, with the bass (the lowest note) on its own track so it can be routed
+ * separately in a DAW.
  */
 
-/** midi-writer-js uses 128 ticks per quarter note. */
-const TICKS_PER_BEAT = 128;
+const TEMPO = 90;
+/** One bar of 4/4 per chord. midi-writer-js uses 128 ticks per quarter note. */
+const CHORD_DURATION = `T${4 * 128}`;
 
-const beatsToTicks = (beats: number) => `T${Math.max(1, Math.round(beats * TICKS_PER_BEAT))}`;
-
-export interface MidiExportOptions {
-    /** Write the bass note to a second track. Defaults to true. */
-    separateBassTrack?: boolean;
-}
-
-/** Returns the MIDI bytes, or null when nothing in the doc is playable. */
-export function buildMidi(
-    doc: ProgressionDoc,
-    { separateBassTrack = true }: MidiExportOptions = {},
-): Uint8Array | null {
+/** Returns the MIDI bytes, or null when no chord has notes. */
+export function buildMidi(chords: VoicedChord[]): Uint8Array | null {
     const chordTrack = new MidiWriter.Track();
-    chordTrack.setTempo(doc.tempo);
-    chordTrack.setTimeSignature(doc.timeSignature[0], doc.timeSignature[1], 24, 8);
+    chordTrack.setTempo(TEMPO);
+    chordTrack.setTimeSignature(4, 4, 24, 8);
     chordTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }));
 
     const bassTrack = new MidiWriter.Track();
-    bassTrack.setTempo(doc.tempo);
-    bassTrack.setTimeSignature(doc.timeSignature[0], doc.timeSignature[1], 24, 8);
+    bassTrack.setTempo(TEMPO);
+    bassTrack.setTimeSignature(4, 4, 24, 8);
     bassTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 33 }));
 
     let wroteAnything = false;
 
-    doc.slots.forEach((slot) => {
-        const [bass, ...voices] = slot.notes;
-        const all = slot.notes;
-        const duration = beatsToTicks(slot.durationBeats);
+    for (const { notes } of chords) {
+        const [bass, ...voices] = notes;
 
-        // Without a separate bass track the bass is folded into the chord.
-        const chordNotes = separateBassTrack ? voices : all;
+        // A silent event keeps the timeline aligned when a chord has no notes.
+        chordTrack.addEvent(
+            voices.length
+                ? new MidiWriter.NoteEvent({ pitch: voices, duration: CHORD_DURATION })
+                : new MidiWriter.NoteEvent({ pitch: ["C4"], duration: CHORD_DURATION, velocity: 0 }),
+        );
+        bassTrack.addEvent(
+            bass
+                ? new MidiWriter.NoteEvent({ pitch: [bass], duration: CHORD_DURATION })
+                : new MidiWriter.NoteEvent({ pitch: ["C2"], duration: CHORD_DURATION, velocity: 0 }),
+        );
+        if (bass) wroteAnything = true;
+    }
 
-        if (chordNotes.length) {
-            chordTrack.addEvent(new MidiWriter.NoteEvent({ pitch: chordNotes, duration }));
-            wroteAnything = true;
-        } else {
-            // Keep the timeline aligned when a slot yields nothing playable.
-            chordTrack.addEvent(new MidiWriter.NoteEvent({ pitch: ["C4"], duration, velocity: 0 }));
-        }
-
-        if (separateBassTrack) {
-            const bassEvent = bass
-                ? new MidiWriter.NoteEvent({ pitch: [bass], duration })
-                : new MidiWriter.NoteEvent({ pitch: ["C2"], duration, velocity: 0 });
-            bassTrack.addEvent(bassEvent);
-            if (bass) wroteAnything = true;
-        }
-    });
-
-    if (!wroteAnything) return null;
-
-    const tracks = separateBassTrack ? [chordTrack, bassTrack] : [chordTrack];
-    return new MidiWriter.Writer(tracks).buildFile();
+    return wroteAnything ? new MidiWriter.Writer([chordTrack, bassTrack]).buildFile() : null;
 }
 
 const sanitize = (text: string) =>
@@ -74,10 +52,10 @@ const sanitize = (text: string) =>
         .replace(/[^\w-]+/g, "")
         .substring(0, 50) || "progression";
 
-export function midiFilename(doc: ProgressionDoc): string {
-    const chords = doc.slots
-        .map((slot) => slot.symbol.replace(/\//g, "-").replace(/\s+/g, "_"))
+export function midiFilename(prompt: string, chords: VoicedChord[]): string {
+    const symbols = chords
+        .map((c) => c.symbol.replace(/\//g, "-").replace(/\s+/g, "_"))
         .join("_");
-    const base = sanitize(doc.prompt);
-    return chords ? `${base}_${chords}.mid` : `${base}.mid`;
+    const base = sanitize(prompt);
+    return symbols ? `${base}_${symbols}.mid` : `${base}.mid`;
 }

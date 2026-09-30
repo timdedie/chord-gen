@@ -3,14 +3,11 @@ import { db } from "@/lib/db";
 import { savedProgressions } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { normalizeDoc } from "@/lib/progression/doc";
-import type { ProgressionDoc } from "@/lib/progression/types";
+import { readStoredChords, type VoicedChord } from "@/lib/progression/voicing";
 
 export interface SavedProgressionResponse {
     id: string;
-    chords: string[];
-    /** Always present — rebuilt from `chords` for rows saved before the editor. */
-    doc: ProgressionDoc;
+    chords: VoicedChord[];
     style: string;
     prompt: string;
     savedAt: number;
@@ -19,8 +16,7 @@ export interface SavedProgressionResponse {
 function toResponse(row: typeof savedProgressions.$inferSelect): SavedProgressionResponse {
     return {
         id: row.id,
-        chords: row.chords,
-        doc: normalizeDoc(row.doc, row.chords),
+        chords: readStoredChords(row.voicings, row.chords),
         style: row.style,
         prompt: row.prompt,
         savedAt: row.savedAt.getTime(),
@@ -46,32 +42,32 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json() as {
         id: string;
-        chords: string[];
-        doc?: unknown;
+        chords: unknown;
         style: string;
         prompt: string;
     };
-    if (!body.id || !body.chords || !body.style) {
+
+    // Whatever the client sent is checked, and the symbol column is derived
+    // from it so the two can never drift apart.
+    const voicings = readStoredChords(body.chords);
+    if (!body.id || !voicings.length || !body.style) {
         return NextResponse.json({ error: "Invalid body" }, { status: 400 });
     }
-
-    // Whatever the client sent is coerced into a valid document, and `chords`
-    // is derived from it so the two can never drift apart.
-    const doc = normalizeDoc(body.doc, body.chords);
+    const chords = voicings.map((c) => c.symbol);
 
     await db
         .insert(savedProgressions)
         .values({
             id: body.id,
             userId,
-            chords: doc.slots.map((slot) => slot.symbol),
-            doc,
+            chords,
+            voicings,
             style: body.style,
             prompt: body.prompt ?? "",
         })
         .onConflictDoUpdate({
             target: [savedProgressions.id, savedProgressions.userId],
-            set: { doc, chords: doc.slots.map((slot) => slot.symbol) },
+            set: { voicings, chords },
         });
 
     return NextResponse.json({ ok: true });

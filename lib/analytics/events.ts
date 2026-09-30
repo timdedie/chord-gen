@@ -26,10 +26,8 @@ export const AnalyticsEvent = {
     ProgressionEdited: "progression_edited",
     MidiExported: "midi_exported",
 
-    // Funnel: premium / gating
+    // Funnel: premium
     PremiumToggled: "premium_toggled",
-    PaywallShown: "paywall_shown",
-    PaywallCtaClicked: "paywall_cta_clicked",
 
     // Funnel: conversion / support (monetization is signup + PayPal donations)
     SignupCompleted: "signup_completed",

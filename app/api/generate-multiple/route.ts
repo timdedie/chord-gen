@@ -14,7 +14,7 @@ import { buildMultipleProgressionsMessage } from '@/lib/prompts/generate-multipl
 import { GenerationRound, normalizeHistory, sanitizeFeedback } from '@/lib/prompts/history';
 import { clampChordCount, resolveChordCount } from '@/lib/prompts/chordCount';
 import { captureServer } from '@/lib/analytics/posthog-server';
-import type { VoicedChord } from '@/lib/progression/types';
+import type { VoicedChord } from '@/lib/progression/voicing';
 import { cacheKey, readCache, writeCache } from '@/lib/ai/cache';
 
 export const maxDuration = 25;

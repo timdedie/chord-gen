@@ -1,17 +1,17 @@
 import { pgTable, text, integer, timestamp, primaryKey, jsonb } from "drizzle-orm/pg-core";
-import type { ProgressionDoc } from "@/lib/progression/types";
+import type { VoicedChord } from "@/lib/progression/voicing";
 
 export const savedProgressions = pgTable("saved_progressions", {
     id: text("id").notNull(),
     userId: text("user_id").notNull(),
     chords: text("chords").array().notNull(),
     /**
-     * The full progression document — key, tempo, per-chord duration and
-     * voicing. Null for rows saved before the editor existed; `normalizeDoc`
-     * rebuilds one from `chords` in that case, so `chords` stays the
-     * denormalised view and never goes away.
+     * Each chord with its notes. Stored in the `doc` column, which used to hold
+     * a larger progression document; `readStoredChords` reads either shape,
+     * and falls back to the symbols in `chords` (with no notes) for rows saved
+     * before voicings existed.
      */
-    doc: jsonb("doc").$type<ProgressionDoc>(),
+    voicings: jsonb("doc").$type<VoicedChord[]>(),
     style: text("style").notNull(),
     prompt: text("prompt").notNull().default(""),
     savedAt: timestamp("saved_at").notNull().defaultNow(),

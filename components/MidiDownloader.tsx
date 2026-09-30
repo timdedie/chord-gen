@@ -6,18 +6,18 @@ import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { capture, AnalyticsEvent } from "@/lib/analytics/events";
 import { buildMidi, midiFilename } from "@/lib/progression/midi";
-import type { ProgressionDoc } from "@/lib/progression/types";
+import type { VoicedChord } from "@/lib/progression/voicing";
 
 interface MidiDownloaderProps {
-    /** The progression document — carries tempo, durations and notes. */
-    doc: ProgressionDoc;
+    /** Each chord with the notes playback sounds. */
+    chords: VoicedChord[];
     prompt: string;
     compact?: boolean;
     variant?: React.ComponentProps<typeof Button>["variant"];
 }
 
 const MidiDownloader: React.FC<MidiDownloaderProps> = ({
-    doc: exportDoc,
+    chords,
     prompt,
     compact = false,
     variant,
@@ -25,10 +25,7 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({
     // Building the bytes is pure, so it can be derived. The blob URL is not,
     // and is created on click instead — a results page renders several of these
     // and only one is ever downloaded.
-    const bytes = useMemo(
-        () => (exportDoc.slots.length ? buildMidi(exportDoc) : null),
-        [exportDoc],
-    );
+    const bytes = useMemo(() => buildMidi(chords), [chords]);
 
     if (!bytes) return null;
 
@@ -39,7 +36,7 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({
 
         const link = document.createElement("a");
         link.href = url;
-        link.download = midiFilename(exportDoc);
+        link.download = midiFilename(prompt, chords);
         link.click();
         // Give the browser a tick to start the download before the URL goes away.
         setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -49,7 +46,7 @@ const MidiDownloader: React.FC<MidiDownloaderProps> = ({
         });
         // The activation / "value moment" — user is taking a progression into a DAW.
         capture(AnalyticsEvent.MidiExported, {
-            chord_count: exportDoc.slots.length,
+            chord_count: chords.length,
             prompt_length: prompt.length,
         });
     };

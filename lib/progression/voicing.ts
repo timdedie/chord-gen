@@ -11,6 +11,16 @@ import { Note } from "tonal";
  * played and shown on the keyboard.
  */
 
+/** A chord symbol and the exact notes that realise it. */
+export interface VoicedChord {
+    symbol: string;
+    /**
+     * Pitched notes in scientific pitch notation (C4 = middle C), ascending.
+     * `notes[0]` is the bass. Chosen by the model — nothing re-voices them.
+     */
+    notes: string[];
+}
+
 /**
  * The pitch range voicings must stay inside, and what the keyboard displays.
  * Anything reading this should read it rather than restate it.
@@ -88,4 +98,32 @@ export function validateVoicing(symbol: string, rawNotes: string[]): VoicingResu
     }
 
     return { ok: true, notes };
+}
+
+/**
+ * Voiced chords read back from storage, which is untrusted: rows saved before
+ * voicings existed have only `symbols`, and older formats kept the chords
+ * under `slots`. Notes that no longer check out are dropped rather than
+ * patched up, so those chords are silent — and the reason is logged.
+ */
+export function readStoredChords(raw: unknown, symbols: string[] = []): VoicedChord[] {
+    const stored = Array.isArray(raw) ? raw : (raw as { slots?: unknown } | null)?.slots;
+
+    if (!Array.isArray(stored)) {
+        if (symbols.length) console.warn(`[voicing] no stored notes for ${symbols.join(" ")}.`);
+        return symbols.map((symbol) => ({ symbol, notes: [] }));
+    }
+
+    return stored.flatMap((item): VoicedChord[] => {
+        const { symbol, notes } = (item ?? {}) as { symbol?: unknown; notes?: unknown };
+        if (typeof symbol !== "string" || !symbol.trim()) return [];
+
+        if (!Array.isArray(notes)) {
+            console.warn(`[voicing] ${symbol} has no stored notes.`);
+            return [{ symbol, notes: [] }];
+        }
+        const checked = validateVoicing(symbol, notes.map(String));
+        if (!checked.ok) console.warn(`[voicing] stored notes rejected — ${checked.error}`);
+        return [{ symbol, notes: checked.ok ? checked.notes : [] }];
+    });
 }

@@ -54,15 +54,6 @@ export const VoicedChordSchema = z.object(voicedChordShape)
     .describe('One chord: its symbol and the exact notes that voice it.');
 
 /**
- * Schema factories — enforce exact chord count at the schema level.
- */
-export const createProgressionSchema = (numChords: number) => z.object({
-    chords: z.array(VoicedChordSchema)
-        .length(numChords)
-        .describe(`A ${numChords}-chord progression.`),
-});
-
-/**
  * `allowLengthChange` relaxes the exact-count rule to the 2-8 range. Used for
  * feedback rounds: the user may be asking for a different length ("make it 6
  * chords"), and a hard `.length()` would reject the model's correct answer

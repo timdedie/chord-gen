@@ -1,4 +1,4 @@
-import type { VoicedChord } from '@/lib/progression/types';
+import type { VoicedChord } from '@/lib/progression/voicing';
 import { type GenerationRound, collectFeedback, formatRounds } from './history';
 import { formatVoicedChord } from './format';
 

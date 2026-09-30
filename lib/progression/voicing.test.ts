@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Note } from "tonal";
 
-import { docFromChords, normalizeDoc } from "./doc";
 import { buildMidi } from "./midi";
-import { DOC_VERSION, type VoicedChord } from "./types";
-import { validateVoicing } from "./voicing";
+import { readStoredChords, validateVoicing, type VoicedChord } from "./voicing";
 import { VoicedChordSchema } from "../schemas";
 
 /**
@@ -93,33 +91,33 @@ const PROGRESSION: VoicedChord[] = [
     { symbol: "A7b9", notes: ["A2", "G3", "C#4", "Bb4"] },
 ];
 
-test("saved docs keep their notes, and nothing invents notes for older ones", () => {
-    const doc = docFromChords(PROGRESSION, { prompt: "test" });
-    const restored = normalizeDoc(JSON.parse(JSON.stringify(doc)));
-    assert.deepEqual(restored.slots.map((s) => s.notes), PROGRESSION.map((c) => c.notes));
+test("stored chords keep their notes, and nothing invents notes for older rows", () => {
+    const stored = JSON.parse(JSON.stringify(PROGRESSION));
+    assert.deepEqual(readStoredChords(stored), PROGRESSION);
 
-    // Tampered notes do not survive a round trip.
-    const tampered = JSON.parse(JSON.stringify(doc));
-    tampered.slots[0].notes = ["D2", "not-a-note", "F4"];
-    assert.deepEqual(normalizeDoc(tampered).slots[0].notes, []);
+    // Unplayable notes do not survive a round trip.
+    stored[0].notes = ["D2", "not-a-note", "F4"];
+    assert.deepEqual(readStoredChords(stored)[0], { symbol: "Dm9", notes: [] });
 
-    // Earlier versions had no notes at all.
-    const legacy = { ...JSON.parse(JSON.stringify(doc)), version: DOC_VERSION - 1 };
-    assert.deepEqual(normalizeDoc(legacy).slots[1].notes, []);
+    // The older document format kept chords under `slots`.
+    const legacyDoc = { version: 4, slots: [{ id: "a", symbol: "G13", notes: ["G2", "F3", "B3", "E4"], durationBeats: 4 }] };
+    assert.deepEqual(readStoredChords(legacyDoc), [{ symbol: "G13", notes: ["G2", "F3", "B3", "E4"] }]);
+    assert.deepEqual(readStoredChords({ version: 3, slots: [{ symbol: "Am7" }] }), [{ symbol: "Am7", notes: [] }]);
 
-    const fromChords = normalizeDoc(null, ["Cmaj7", "Am7"]);
-    assert.deepEqual(fromChords.slots.map((s) => s.symbol), ["Cmaj7", "Am7"]);
-    assert.deepEqual(fromChords.slots.map((s) => s.notes), [[], []]);
+    // Rows saved before any of this have only the symbol column.
+    assert.deepEqual(readStoredChords(null, ["Cmaj7", "Am7"]), [
+        { symbol: "Cmaj7", notes: [] },
+        { symbol: "Am7", notes: [] },
+    ]);
 });
 
-test("the downloaded file contains exactly the model's notes", () => {
-    const doc = docFromChords(PROGRESSION, { prompt: "test" });
-    const bytes = buildMidi(doc);
+test("the downloaded file contains exactly the model's notes, one bar each", () => {
+    const bytes = buildMidi(PROGRESSION);
     assert.ok(bytes);
 
     const { onsets, division, tempo, trackCount } = parseMidi(bytes as Uint8Array);
     assert.equal(trackCount, 2, "expected a chord track and a bass track");
-    assert.equal(tempo, doc.tempo);
+    assert.equal(tempo, 90);
 
     const ticks = [...onsets.keys()].sort((a, b) => a - b);
     assert.equal(ticks.length, PROGRESSION.length);
@@ -127,10 +125,11 @@ test("the downloaded file contains exactly the model's notes", () => {
     PROGRESSION.forEach((chord, i) => {
         const inFile = (onsets.get(ticks[i]) as number[]).sort((a, b) => a - b);
         assert.deepEqual(inFile, chord.notes.map((n) => Note.midi(n)), `${chord.symbol}: file does not match`);
-        if (i > 0) assert.equal(ticks[i] - ticks[i - 1], doc.slots[i - 1].durationBeats * division);
+        if (i > 0) assert.equal(ticks[i] - ticks[i - 1], 4 * division);
     });
-});
 
+    assert.equal(buildMidi([{ symbol: "C", notes: [] }]), null);
+});
 
 /**
  * A minimal Standard MIDI File reader.
