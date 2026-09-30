@@ -54,7 +54,6 @@ pnpm lint         # Run ESLint
 
 Required in `.env.local`:
 - `DEEPSEEK_API_KEY` - DeepSeek API key (primary LLM)
-- `GOOGLE_GENERATIVE_AI_API_KEY` - Google GenAI (currently unused — every request runs on `deepseek-flash` with no fallback model)
 
 Optional (analytics — everything no-ops cleanly if unset):
 - `NEXT_PUBLIC_POSTHOG_KEY` - PostHog project API key

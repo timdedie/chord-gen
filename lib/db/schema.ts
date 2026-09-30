@@ -6,10 +6,9 @@ export const savedProgressions = pgTable("saved_progressions", {
     userId: text("user_id").notNull(),
     chords: text("chords").array().notNull(),
     /**
-     * Each chord with its notes. Stored in the `doc` column, which used to hold
-     * a larger progression document; `readStoredChords` reads either shape,
-     * and falls back to the symbols in `chords` (with no notes) for rows saved
-     * before voicings existed.
+     * Each chord with its notes, in the column still named `doc`. Rows saved
+     * before voicings hold something else there; `readStoredChords` then
+     * returns the symbols from `chords` with no notes.
      */
     voicings: jsonb("doc").$type<VoicedChord[]>(),
     style: text("style").notNull(),

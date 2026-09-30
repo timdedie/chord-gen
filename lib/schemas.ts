@@ -113,10 +113,3 @@ export const createAlternativeChordsSchema = (originalChord: string) => {
             ),
     });
 };
-
-/**
- * Type definitions
- */
-export type ValidChordString = z.infer<typeof ValidChordStringSchema>;
-export type VoicedChordOutput = z.infer<typeof VoicedChordSchema>;
-export type AlternativeChord = z.infer<ReturnType<typeof createAlternativeChordsSchema>>['alternatives'][number];

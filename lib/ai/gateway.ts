@@ -7,7 +7,7 @@ import { auth } from "@clerk/nextjs/server";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { getUserRole, type UserRole } from "@/lib/premium";
 import { buildValidationErrorMessage } from "@/lib/prompts/retry";
-import { modelChain, providerOptions, resolveModel, type ModelSpec, type Tier } from "./models";
+import { modelChain, providerOptions, resolveModel, type Tier } from "./models";
 
 /**
  * The single entry point for every AI route.
@@ -182,8 +182,4 @@ export async function generateStructured<TSchema extends z.ZodTypeAny>({
 /** Chooses the model tier, without granting premium to anyone not entitled to it. */
 export function tierFor(premiumGranted: boolean): Tier {
     return premiumGranted ? "premium" : "standard";
-}
-
-export function describeModelSpec(spec: ModelSpec): string {
-    return `${spec.provider}:${spec.id}`;
 }

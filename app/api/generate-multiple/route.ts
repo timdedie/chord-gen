@@ -26,23 +26,12 @@ interface RequestBody {
     rounds?: GenerationRound[];
     /** Feedback the user gave on everything generated so far, driving this round. */
     feedback?: string;
-    /** Legacy flat form of `rounds`, kept so older clients keep working. */
-    existingProgressions?: { chords: string[]; style: string }[];
     premium?: boolean;
 }
 
 interface Progression {
     chords: VoicedChord[];
     style: string;
-}
-
-/** Normalizes whatever the client sent (new `rounds`, or legacy `existingProgressions`) into ordered rounds. */
-function historyFromBody(body: RequestBody): GenerationRound[] {
-    if (Array.isArray(body.rounds)) return normalizeHistory(body.rounds);
-    if (Array.isArray(body.existingProgressions) && body.existingProgressions.length > 0) {
-        return normalizeHistory([{ progressions: body.existingProgressions }]);
-    }
-    return [];
 }
 
 /**
@@ -94,7 +83,7 @@ async function claimPremiumSlot(userId: string, limit: number): Promise<boolean>
 
 export const POST = aiRoute<RequestBody>('generate-multiple', async ({ body, userId, role }) => {
     const { prompt, numChords, premium } = body;
-    const history = historyFromBody(body);
+    const history = normalizeHistory(body.rounds);
     const feedback = sanitizeFeedback(body.feedback);
 
     if (!prompt) throw new AiRouteError('Prompt is required.', 400);

@@ -13,15 +13,11 @@ export function formatVoicedProgression(chords: VoicedChord[], separator = ' - '
     return chords.map(formatVoicedChord).join(separator);
 }
 
-/**
- * Coerce untrusted request chords into voiced chords. Bare strings are still
- * accepted, from clients that predate generated notes, and simply carry none.
- */
+/** Coerce untrusted request chords into voiced chords, dropping malformed ones. */
 export function parseVoicedChords(raw: unknown): VoicedChord[] {
     if (!Array.isArray(raw)) return [];
 
     return raw.flatMap((item): VoicedChord[] => {
-        if (typeof item === 'string') return item.trim() ? [{ symbol: item.trim(), notes: [] }] : [];
         if (!item || typeof item !== 'object') return [];
 
         const { symbol, notes } = item as { symbol?: unknown; notes?: unknown };

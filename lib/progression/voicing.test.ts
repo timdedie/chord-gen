@@ -99,12 +99,8 @@ test("stored chords keep their notes, and nothing invents notes for older rows",
     stored[0].notes = ["D2", "not-a-note", "F4"];
     assert.deepEqual(readStoredChords(stored)[0], { symbol: "Dm9", notes: [] });
 
-    // The older document format kept chords under `slots`.
-    const legacyDoc = { version: 4, slots: [{ id: "a", symbol: "G13", notes: ["G2", "F3", "B3", "E4"], durationBeats: 4 }] };
-    assert.deepEqual(readStoredChords(legacyDoc), [{ symbol: "G13", notes: ["G2", "F3", "B3", "E4"] }]);
-    assert.deepEqual(readStoredChords({ version: 3, slots: [{ symbol: "Am7" }] }), [{ symbol: "Am7", notes: [] }]);
-
-    // Rows saved before any of this have only the symbol column.
+    // Rows saved before voicings have only the symbol column.
+    assert.deepEqual(readStoredChords({ version: 3, slots: [] }, ["Am7"]), [{ symbol: "Am7", notes: [] }]);
     assert.deepEqual(readStoredChords(null, ["Cmaj7", "Am7"]), [
         { symbol: "Cmaj7", notes: [] },
         { symbol: "Am7", notes: [] },

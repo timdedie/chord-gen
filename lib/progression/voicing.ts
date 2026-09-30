@@ -101,20 +101,18 @@ export function validateVoicing(symbol: string, rawNotes: string[]): VoicingResu
 }
 
 /**
- * Voiced chords read back from storage, which is untrusted: rows saved before
- * voicings existed have only `symbols`, and older formats kept the chords
- * under `slots`. Notes that no longer check out are dropped rather than
- * patched up, so those chords are silent — and the reason is logged.
+ * Voiced chords read back from storage, which is untrusted. Rows saved before
+ * voicings existed have only their `symbols`, so those chords come back with
+ * no notes and stay silent. Notes that no longer check out are dropped rather
+ * than patched up. Either way the reason is logged.
  */
 export function readStoredChords(raw: unknown, symbols: string[] = []): VoicedChord[] {
-    const stored = Array.isArray(raw) ? raw : (raw as { slots?: unknown } | null)?.slots;
-
-    if (!Array.isArray(stored)) {
+    if (!Array.isArray(raw)) {
         if (symbols.length) console.warn(`[voicing] no stored notes for ${symbols.join(" ")}.`);
         return symbols.map((symbol) => ({ symbol, notes: [] }));
     }
 
-    return stored.flatMap((item): VoicedChord[] => {
+    return raw.flatMap((item): VoicedChord[] => {
         const { symbol, notes } = (item ?? {}) as { symbol?: unknown; notes?: unknown };
         if (typeof symbol !== "string" || !symbol.trim()) return [];
 
